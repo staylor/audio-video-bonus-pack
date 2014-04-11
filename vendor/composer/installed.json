@@ -500,5 +500,58 @@
             "video",
             "video processing"
         ]
+    },
+    {
+        "name": "php-ffmpeg/extras",
+        "version": "0.3.1",
+        "version_normalized": "0.3.1.0",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/alchemy-fr/PHP-FFMpeg-Extras.git",
+            "reference": "4b3f87467e27c828641c3361ad395492775ab98c"
+        },
+        "dist": {
+            "type": "zip",
+            "url": "https://api.github.com/repos/alchemy-fr/PHP-FFMpeg-Extras/zipball/4b3f87467e27c828641c3361ad395492775ab98c",
+            "reference": "4b3f87467e27c828641c3361ad395492775ab98c",
+            "shasum": ""
+        },
+        "require": {
+            "php": ">=5.3.2",
+            "php-ffmpeg/php-ffmpeg": "~0.3"
+        },
+        "require-dev": {
+            "phpunit/phpunit": "~3.7",
+            "sami/sami": "~1.0"
+        },
+        "time": "2014-02-24 10:48:44",
+        "type": "library",
+        "extra": {
+            "branch-alias": {
+                "dev-master": "0.3-dev"
+            }
+        },
+        "installation-source": "dist",
+        "autoload": {
+            "psr-0": {
+                "FFMpeg": "src"
+            }
+        },
+        "notification-url": "https://packagist.org/downloads/",
+        "license": [
+            "MIT"
+        ],
+        "authors": [
+            {
+                "name": "Phraseanet Team",
+                "email": "dev.team@alchemy.fr",
+                "homepage": "http://www.phraseanet.com/"
+            }
+        ],
+        "description": "A set of audio/video formats compatible with PHP-FFMpeg",
+        "keywords": [
+            "codecs",
+            "ffmpeg"
+        ]
     }
 ]

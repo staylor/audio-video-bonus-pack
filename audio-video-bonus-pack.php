@@ -34,6 +34,64 @@ class AudioVideoBonusPack {
 			add_action( 'admin_notices', array( $this, 'no_ffmpeg_notice' ) );
 			return;
 		}
+
+		add_filter( 'wp_generate_attachment_metadata', array( $this, 'wp_generate_attachment_metadata' ), 10, 2 );
+	}
+
+	function wp_generate_attachment_metadata( $data, $post_id ) {
+		$file = get_attached_file( $post_id );
+		$ext = wp_check_filetype( $file );
+
+		switch ( $ext['type'] ) {
+		case 'video/mp4':
+			$ffmpeg = $this->get_ffmpeg();
+			$video = $ffmpeg->open( $file );
+
+			$base = basename( $file );
+			$front = rtrim( $file, $base );
+
+			$attachment = get_post( $post_id, ARRAY_A );
+			$props = $attachment;
+			unset( $props['post_mime_type'], $props['guid'], $props['post_name'], $props['ID'] );
+			$thumbnail_id = get_post_thumbnail_id( $post_id );
+
+			foreach ( array( 'webm', 'ogv' ) as $type ) {
+				$key = '_' . $type . '_fallback';
+				$meta = get_post_meta( $post_id, $key, true );
+				if ( empty( $meta ) ) {
+					$type_file = $front . rtrim( $base, $ext['ext'] ) . $type;
+
+					//try {
+						switch ( $type ) {
+						case 'ogv':
+							$video->save( new FFMpeg\Format\Video\Ogg(), $type_file );
+							break;
+						case 'webm':
+							$video->save( new FFMpeg\Format\Video\WebM(), $type_file );
+							break;
+						}
+//					} catch ( Exception $e ) {
+//						break 2;
+//					}
+
+					$type_ext = wp_check_filetype( $type_file );
+					$props['post_mime_type'] = $type_ext['type'];
+
+					$attachment_id = wp_insert_attachment( $props, $type_file );
+					update_post_meta( $post_id, $key, $attachment_id );
+
+					$attach_data = wp_generate_attachment_metadata( $attachment_id, $type_file );
+					wp_update_attachment_metadata( $attachment_id, $attach_data );
+
+					if ( ! empty( $thumbnail_id ) ) {
+						set_post_thumbnail( $attachment_id, $thumbnail_id );
+					}
+				}
+			}
+			break;
+		}
+
+		return $data;
 	}
 
 	function get_ffmpeg() {
