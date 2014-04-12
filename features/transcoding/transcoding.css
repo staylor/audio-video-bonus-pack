@@ -1,0 +1,14 @@
+.av-encoding-item-bar {
+	background: #ddd;
+	height: 20px;
+	width: 100%;
+	position: relative;
+	border-radius: 10px 10px;
+}
+
+.av-encoding-item-progress {
+	background: #0074a2;
+	height: 20px;
+	position: absolute;
+	border-radius: 10px 10px;
+}

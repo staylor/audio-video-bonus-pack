@@ -1,42 +1,29 @@
 <?php
-/*
-Plugin Name: Audio/Video Bonus Pack
-Description: Experimental/Supplemental features not included in WordPress core.
-Author: Scott Taylor
-Author URI: http://profiles.wordpress.org/wonderboymusic/
-Version: 0.1
-License: GPLv2 or later
-License URI: http://www.gnu.org/licenses/gpl-2.0.html
-*/
+/**
+ * Automatically transcode uploads into their relevant HTML5 fallbacks
+ *
+ * @package AudioVideoBonusPack
+ * @subpackage Transcoding
+ */
 
-require_once( __DIR__ . '/vendor/autoload.php' );
-
-class AudioVideoBonusPack {
+class AudioVideoTranscoding extends AVSingleton {
 	private $encode_key = 'av_encoding_media';
 	private $queue_key = 'av_media_queue';
 	private $failed_key = 'av_media_failed';
+
 	private $ffmpeg_bin;
 	private $ffprobe_bin;
-
-	private static $instance;
-
-	public static function get_instance() {
-		if ( ! self::$instance instanceof AudioVideoBonusPack ) {
-			self::$instance = new self;
-		}
-		return self::$instance;
-	}
 
 	/**
 	 * Sandbox actions and filters
 	 */
-	private function __construct() {
+	protected function __construct() {
 		add_action( 'init', array( $this, 'check_for_activity' ) );
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
 		add_action( 'delete_post', array( $this, 'delete_post' ) );
 
-		$this->ffmpeg_bin = get_option( 'ffmpeg_path' );
-		$this->ffprobe_bin = get_option( 'ffprobe_path' );
+		$this->ffmpeg_bin = get_option( 'av_ffmpeg_path' );
+		$this->ffprobe_bin = get_option( 'av_ffprobe_path' );
 
 		if ( empty( $this->ffmpeg_bin ) || empty( $this->ffprobe_bin ) ) {
 			add_action( 'admin_notices', array( $this, 'no_ffmpeg_notice' ) );
@@ -44,6 +31,79 @@ class AudioVideoBonusPack {
 		}
 
 		add_filter( 'wp_generate_attachment_metadata', array( $this, 'wp_generate_attachment_metadata' ), 10, 2 );
+	}
+
+	/**
+	 * Admin-specific actions and filters
+	 */
+	function admin_init() {
+		$this->encodes = get_transient( $this->encode_key, array() );
+		$this->queue = get_transient( $this->queue_key, array() );
+		$this->failed = get_transient( $this->failed_key, array() );
+
+		add_action( 'wp_ajax_av-read-queue', array( $this, 'av_read_queue_json' ) );
+
+		$pending = ! empty( $this->encodes ) || ! empty( $this->queue );
+		if ( $pending ) {
+			add_action( 'admin_footer', array( $this, 'admin_footer' ) );
+			wp_enqueue_style( 'av-transcoding', plugins_url( 'transcoding.css', __FILE__ ) );
+			wp_enqueue_script( 'av-transcoding', plugins_url( 'transcoding.js', __FILE__ ), array( 'backbone', 'wp-util' ), '', true );
+		}
+
+		if ( $pending || ! empty( $this->failed ) ) {
+			add_action( 'admin_notices', array( $this, 'ffmpeg_encoding_notice' ) );
+		}
+
+		foreach ( array( 'ffmpeg', 'ffprobe' ) as $bin )  {
+			register_setting( 'media', 'av_' . $bin . '_path' );
+			add_settings_field( 'av-' . $bin, __(  sprintf( 'Path to <code>%s</code> binary', $bin ) ), array( $this, 'field_' . $bin ), 'media', 'av-settings' );
+		}
+	}
+
+	function av_read_queue_json() {
+		$queue = array();
+		$encodes = array();
+
+		foreach ( $this->encodes as $key => $progress ) {
+			list( $id, $type ) = explode( '_', $key );
+
+			$encodes[] = array(
+				'pid' => $id,
+				'type' => strtoupper( $type ),
+				'progress' => min( 100, $progress + 1 ),
+				'title' => get_the_title( $id )
+			);
+		}
+
+		foreach ( $this->queue as $key => $file ) {
+			if ( isset( $this->encodes[ $key ] ) ) {
+				continue;
+			}
+
+			list( $id, $type ) = explode( '_', $key );
+
+			$queue[] = array(
+				'pid' => $id,
+				'type' => $type,
+				'file' => $file,
+				'path' => ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' )
+			);
+		}
+
+		echo json_encode( array(
+			'encodes' => $encodes,
+			'queue' => $queue,
+			'failed' => $this->failed,
+		) );
+
+		if ( empty( $encodes ) && ! empty( $queue ) ) {
+			$this->check_queue();
+		}
+		exit();
+	}
+
+	function admin_footer() {
+		include_once( __DIR__ . '/templates.php' );
 	}
 
 	/**
@@ -67,7 +127,7 @@ class AudioVideoBonusPack {
 	}
 
 	/**
-	 * Fire a non-blocking request to pop an item off the queue if no file is is progress
+	 * Fire a non-blocking request to pop an item off the queue if no file is in progress
 	 */
 	function check_queue() {
 		$url = add_query_arg( array(
@@ -75,7 +135,7 @@ class AudioVideoBonusPack {
 		), home_url( '/' ) );
 
 		$nonced = html_entity_decode( wp_nonce_url( $url, 'av_encode' ) );
-		error_log( $nonced );
+		$this->log( $nonced );
 		wp_remote_get( $nonced, array( 'blocking' => false ) );
 	}
 
@@ -126,6 +186,7 @@ class AudioVideoBonusPack {
 			$fallbacks[] = 'webm';
 			break;
 
+		case 'flv':
 		case 'mov':
 		case 'wmv':
 			$fallbacks = array( 'webm', 'ogv' );
@@ -160,7 +221,8 @@ class AudioVideoBonusPack {
 
 		$check = wp_verify_nonce( $_GET['_wpnonce'], $_GET['action'] );
 		if ( ! $check ) {
-			error_log( 'nonce failed' );
+			// the first nonce is always failing for some reason...
+			$this->log( 'nonce failed' );
 			//return;
 		}
 
@@ -221,7 +283,6 @@ class AudioVideoBonusPack {
 		}
 
 		if ( $this->progress && $this->progress !== $this->last_progress ) {
-			error_log( "$percentage% transcoded" );
 			$this->last_progress = $this->progress;
 
 			$encode_key = $this->id . '_' . $this->type;
@@ -229,6 +290,18 @@ class AudioVideoBonusPack {
 			$encodes[ $encode_key ] = $percentage;
 			set_transient( $this->encode_key, $encodes );
 		}
+	}
+
+	function remove_encode( $encode_key ) {
+		$encodes = get_transient( $this->encode_key );
+		unset( $encodes[ $encode_key ] );
+		set_transient( $this->encode_key, $encodes );
+	}
+
+	function add_to_failed( $encode_key, $type_file ) {
+		$failed = get_transient( $this->failed_key );
+		$failed[ $encode_key ] = $type_file;
+		set_transient( $this->failed_key, $failed );
 	}
 
 	/**
@@ -239,11 +312,10 @@ class AudioVideoBonusPack {
 	 * @param string $type_file
 	 */
 	function encode_media( $id, $type, $type_file ) {
+		$fallback_types = array( 'mp3', 'ogg', 'ogv', 'webm', 'mp4' );
 		$encode_key = $id . '_' . $type;
-		if ( file_exists( $type_file ) ) {
-			$encodes = get_transient( $this->encode_key );
-			unset( $encodes[ $encode_key ] );
-			set_transient( $this->encode_key, $encodes );
+		if ( ! in_array( $type, $fallback_types ) || file_exists( $type_file ) ) {
+			$this->remove_encode( $encode_key );
 			return;
 		}
 
@@ -251,6 +323,10 @@ class AudioVideoBonusPack {
 		$this->type = $type;
 
 		$file = get_attached_file( $id );
+
+		// Autoload PHP-FFMpeg + dependencies
+		require_once( AV_DIR . '/vendor/autoload.php' );
+
 		$ffmpeg = $this->get_ffmpeg();
 		$media = $ffmpeg->open( $file );
 
@@ -272,41 +348,28 @@ class AudioVideoBonusPack {
 			switch ( $type ) {
 			case 'mp3':
 				$format = new FFMpeg\Format\Audio\Mp3();
-				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$media->save( $format, $type_file );
 				break;
 			case 'ogg':
 				$format = new FFMpeg\Format\Audio\Vorbis();
-				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$media->save( $format, $type_file );
 				break;
 			case 'ogv':
 				$format = new FFMpeg\Format\Video\Ogg();
-				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$media->save( $format, $type_file );
 				break;
 			case 'webm':
 				$format = new FFMpeg\Format\Video\WebM();
-				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$media->save( $format, $type_file );
 				break;
 			case 'mp4':
 				$format = new FFMpeg\Format\Video\X264();
-				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$media->save( $format, $type_file );
 				break;
 			}
+
+			$format->on( 'progress', array( $this, 'do_progress' ) );
+			$media->save( $format, $type_file );
 		} catch ( Exception $e ) {
-			error_log( 'Caught exception: ' . $e->getMessage() );
+			$this->log( 'Caught exception: ' . $e->getMessage() );
 
-			$encodes = get_transient( $this->encode_key );
-			unset( $encodes[ $encode_key ] );
-			set_transient( $this->encode_key, $encodes );
-
-			$failed = get_transient( $this->failed_key );
-			$failed[ $encode_key ] = $type_file;
-			set_transient( $this->failed_key, $failed );
-
+			$this->remove_encode( $encode_key );
+			$this->add_to_failed( $encode_key, $type_file );
 			$this->check_queue();
 			return;
 		}
@@ -330,9 +393,7 @@ class AudioVideoBonusPack {
 			set_post_thumbnail( $attachment_id, $thumbnail_id );
 		}
 
-		$encodes = get_transient( $key );
-		unset( $encodes[ $encode_key ] );
-		set_transient( $this->encode_key, $encodes );
+		$this->remove_encode( $encode_key );
 		$this->check_queue();
 	}
 
@@ -366,7 +427,7 @@ class AudioVideoBonusPack {
 			), home_url( '/' ) );
 
 			$nonced = html_entity_decode( wp_nonce_url( $url, 'av_queue' ) );
-			error_log( $nonced );
+			$this->log( $nonced );
 			wp_remote_get( $nonced, array( 'blocking' => false ) );
 			break;
 		}
@@ -376,6 +437,7 @@ class AudioVideoBonusPack {
 
 	/**
 	 * Return an instance of ffmpeg wrapper that does not use threads
+	 *	Give the process 30 minutes to run for large files
 	 *
 	 * @return FFMpeg\FFMpeg
 	 */
@@ -383,7 +445,8 @@ class AudioVideoBonusPack {
 		return FFMpeg\FFMpeg::create( array(
 			'ffmpeg.binaries' => $this->ffmpeg_bin,
 			'ffprobe.binaries' => $this->ffprobe_bin,
-			'ffmpeg.threads' => 0
+			'ffmpeg.threads' => 0,
+			'timeout' => HOUR_IN_SECONDS / 2
 		) );
 	}
 
@@ -403,41 +466,19 @@ class AudioVideoBonusPack {
 	 * Display data related to the current queue
 	 */
 	function ffmpeg_encoding_notice() {
-		$size = count( $this->encodes );
-		$message = 1 === $size ? '1 media file that is' : "$size media files that are";
-		if ( ! empty( $this->encodes ) || ! empty( $this->queue ) ): ?>
-<div class="updated">
-	<?php if ( ! empty( $this->encodes ) ): ?>
-	<p><strong>Encoding media</strong> You have <?php echo $message ?> being encoded....</p>
-	<?php foreach ( $this->encodes as $key => $progress ): ?>
-		<p><?php
-		list( $id, $type ) = explode( '_', $key );
-		printf( '<strong>%s</strong> for "%s" is %d%% done.', strtoupper( $type ), get_the_title( $id ), $progress );
-		?></p>
-	<?php endforeach;
-	endif; ?>
-
-	<?php
-	if ( ! empty( $this->queue ) ):
-		foreach ( $this->queue as $key => $file ):
-			if ( isset( $this->encodes[ $key ] ) ) {
-				continue;
-			}
-		?>
-		<p><?php
-		$path = ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' );
-		printf( '<strong>Queued for creation:</strong> %s', $path ); ?></p>
-	<?php endforeach; ?>
-		<p><a href="<?php
-			$url = add_query_arg( 'action', 'av_delete_queue', home_url( '/' ) );
-			echo wp_nonce_url( $url, 'av_delete_queue' ) ?>">Delete all queued items</a></p>
-	<?php endif; ?>
+	?>
+<div class="updated" id="av-queue">
+	<p id="av-encode-message"><strong>Encoding media</strong></p>
+	<div id="av-encode-items"></div>
+	<div id="av-queued-items"></div>
+	<p id="av-queued-message"><a href="<?php
+		$url = add_query_arg( 'action', 'av_delete_queue', home_url( '/' ) );
+		echo wp_nonce_url( $url, 'av_delete_queue' ) ?>">Delete all queued items</a></p>
 </div>
 	<?php
-		endif;
 
 	if ( ! empty( $this->failed ) ): ?>
-<div class="error">
+<div class="error" id="av-failed">
 	<?php foreach ( $this->failed as $key => $file ): ?>
 	<p><?php
 		$path = ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' );
@@ -451,31 +492,12 @@ class AudioVideoBonusPack {
 	}
 
 	/**
-	 * Admin-specific actions and filters
-	 */
-	function admin_init() {
-		$this->encodes = get_transient( $this->encode_key );
-		$this->queue = get_transient( $this->queue_key );
-		$this->failed = get_transient( $this->failed_key );
-		if ( ! empty( $this->encodes ) || ! empty( $this->queue ) || ! empty( $this->failed ) ) {
-			add_action( 'admin_notices', array( $this, 'ffmpeg_encoding_notice' ) );
-		}
-
-		add_settings_section( 'av-settings', __( 'Audio/Video Settings' ), array( $this, 'settings' ), 'media' );
-
-		foreach ( array( 'ffmpeg', 'ffprobe' ) as $bin )  {
-			register_setting( 'media', $bin . '_path' );
-			add_settings_field( 'av-' . $bin, __(  sprintf( 'Path to <code>%s</code> binary', $bin ) ), array( $this, 'field_' . $bin ), 'media', 'av-settings' );
-		}
-	}
-
-	/**
 	 * Outputs the field for 'ffmpeg_path'
 	 */
 	function field_ffmpeg() {
-		$option = get_option( 'ffmpeg_path' );
+		$option = get_option( 'av_ffmpeg_path' );
 	?>
-	<input type="text" name="ffmpeg_path" class="widefat" value="<?php if ( ! empty( $option ) ) {
+	<input type="text" name="av_ffmpeg_path" class="widefat" value="<?php if ( ! empty( $option ) ) {
 		echo esc_attr( $option );
 	} ?>"/>
 	<?php
@@ -485,49 +507,11 @@ class AudioVideoBonusPack {
 	 * Outputs the field for 'ffprobe_path'
 	 */
 	function field_ffprobe() {
-		$option = get_option( 'ffprobe_path' );
+		$option = get_option( 'av_ffprobe_path' );
 	?>
-	<input type="text" name="ffprobe_path" class="widefat" value="<?php if ( ! empty( $option ) ) {
+	<input type="text" name="av_ffprobe_path" class="widefat" value="<?php if ( ! empty( $option ) ) {
 		echo esc_attr( $option );
 	} ?>"/>
 	<?php
 	}
-
-	/**
-	 * Introductory text before A/V settings fields
-	 */
-	function settings() {
-	?>
-	If you were redirected here, you need to specify the paths to these binaries: <em>(You can find them via</em> <code>which ffmpeg</code><em>)</em>
-	<?php
-	}
 }
-AudioVideoBonusPack::get_instance();
-
-/**
- * Perform safe redirection to media settings page.
- *
- */
-function av_redirect_activated_plugin() {
-	wp_safe_redirect( admin_url( 'options-media.php' ) );
-	exit();
-}
-
-/**
- * On activation, if binaries cannot be detected, redirect to the settings page for Media.
- *
- */
-function av_detect_ffmpeg() {
-	exec( "which ffmpeg", $exec_ffmpeg );
-	if ( ! empty( $exec_ffmpeg ) ) {
-		add_option( 'ffmpeg_path', reset( $exec_ffmpeg ) );
-	}
-	exec( "which ffprobe", $exec_ffprobe );
-	if ( ! empty( $exec_ffprobe ) ) {
-		add_option( 'ffprobe_path', reset( $exec_ffprobe ) );
-	}
-	if ( empty( $exec_ffmpeg ) || empty( $exec_ffprobe ) ) {
-		add_action( 'activated_plugin', 'av_redirect_activated_plugin' );
-	}
-}
-register_activation_hook( __FILE__, 'av_detect_ffmpeg' );
