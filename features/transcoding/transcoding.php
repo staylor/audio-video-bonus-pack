@@ -6,6 +6,8 @@
  * @subpackage Transcoding
  */
 
+define( 'AV_ENCODE_MAX', 1 );
+
 class AudioVideoTranscoding extends AVSingleton {
 	private $encode_key = 'av_encoding_media';
 	private $queue_key = 'av_media_queue';
@@ -37,22 +39,16 @@ class AudioVideoTranscoding extends AVSingleton {
 	 * Admin-specific actions and filters
 	 */
 	function admin_init() {
-		$this->encodes = get_transient( $this->encode_key, array() );
-		$this->queue = get_transient( $this->queue_key, array() );
-		$this->failed = get_transient( $this->failed_key, array() );
+		$this->encodes = $this->get_transient( $this->encode_key, array() );
+		$this->queue = $this->get_transient( $this->queue_key, array() );
+		$this->failed = $this->get_transient( $this->failed_key, array() );
 
 		add_action( 'wp_ajax_av-read-queue', array( $this, 'av_read_queue_json' ) );
 
-		$pending = ! empty( $this->encodes ) || ! empty( $this->queue );
-		if ( $pending ) {
-			add_action( 'admin_footer', array( $this, 'admin_footer' ) );
-			wp_enqueue_style( 'av-transcoding', plugins_url( 'transcoding.css', __FILE__ ) );
-			wp_enqueue_script( 'av-transcoding', plugins_url( 'transcoding.js', __FILE__ ), array( 'backbone', 'wp-util' ), '', true );
-		}
-
-		if ( $pending || ! empty( $this->failed ) ) {
-			add_action( 'admin_notices', array( $this, 'ffmpeg_encoding_notice' ) );
-		}
+		add_action( 'admin_footer', array( $this, 'admin_footer' ) );
+		wp_enqueue_style( 'av-transcoding', plugins_url( 'transcoding.css', __FILE__ ) );
+		wp_enqueue_script( 'av-transcoding', plugins_url( 'transcoding.js', __FILE__ ), array( 'backbone', 'wp-util' ), '', true );
+		add_action( 'admin_notices', array( $this, 'ffmpeg_encoding_notice' ) );
 
 		foreach ( array( 'ffmpeg', 'ffprobe' ) as $bin )  {
 			register_setting( 'media', 'av_' . $bin . '_path' );
@@ -64,30 +60,35 @@ class AudioVideoTranscoding extends AVSingleton {
 		$queue = array();
 		$encodes = array();
 
-		foreach ( $this->encodes as $key => $progress ) {
-			list( $id, $type ) = explode( '_', $key );
+		if ( ! empty( $this->encodes ) ) {
+			foreach ( $this->encodes as $key => $progress ) {
+				list( $id, $type ) = explode( '_', $key );
 
-			$encodes[] = array(
-				'pid' => $id,
-				'type' => strtoupper( $type ),
-				'progress' => min( 100, $progress + 1 ),
-				'title' => get_the_title( $id )
-			);
+				$encodes[] = array(
+					'pid' => $id,
+					'type' => strtoupper( $type ),
+					'progress' => min( 100, $progress + 1 ),
+					'title' => get_the_title( $id )
+				);
+			}
 		}
 
-		foreach ( $this->queue as $key => $file ) {
-			if ( isset( $this->encodes[ $key ] ) ) {
-				continue;
+		if ( ! empty( $this->queue ) ) {
+			foreach ( $this->queue as $key => $file ) {
+				if ( isset( $this->encodes[ $key ] ) ) {
+					continue;
+				}
+
+				list( $id, $type ) = explode( '_', $key );
+
+				$queue[] = array(
+					'pid' => $id,
+					'type' => $type,
+					'file' => $file,
+					'path' => ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' )
+				);
 			}
 
-			list( $id, $type ) = explode( '_', $key );
-
-			$queue[] = array(
-				'pid' => $id,
-				'type' => $type,
-				'file' => $file,
-				'path' => ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' )
-			);
 		}
 
 		echo json_encode( array(
@@ -117,7 +118,7 @@ class AudioVideoTranscoding extends AVSingleton {
 			return;
 		}
 
-		$queue = get_transient( $this->queue_key );
+		$queue = $this->get_transient( $this->queue_key, array() );
 		foreach ( $queue as $key => $file ) {
 			if ( 0 === strpos( $key, $id . '_' ) ) {
 				unset( $queue[ $key ] );
@@ -154,8 +155,8 @@ class AudioVideoTranscoding extends AVSingleton {
 		$base = basename( $file );
 		$front = rtrim( $file, $base );
 
-		$encodes = get_transient( $this->encode_key );
-		$queue = get_transient( $this->queue_key );
+		$encodes = $this->get_transient( $this->encode_key, array() );
+		$queue = $this->get_transient( $this->queue_key, array() );
 		$fallbacks = array();
 
 		switch ( $ext['ext'] ) {
@@ -228,19 +229,19 @@ class AudioVideoTranscoding extends AVSingleton {
 
 		switch ( $_GET['action'] ) {
 		case 'av_delete_queue':
-			delete_transient( $this->queue_key );
+			set_transient( $this->queue_key, array() );
 			wp_safe_redirect( wp_get_referer() );
 			exit();
 
 		case 'av_delete_failed':
-			delete_transient( $this->failed_key );
+			set_transient( $this->failed_key, array() );
 			wp_safe_redirect( wp_get_referer() );
 			exit();
 
 		case 'av_encode':
-			$encodes = get_transient( $this->encode_key );
-			if ( empty( $encodes ) ) {
-				$queue = get_transient( $this->queue_key );
+			$encodes = $this->get_transient( $this->encode_key, array() );
+			if ( empty( $encodes ) || count( $encodes ) < AV_ENCODE_MAX ) {
+				$queue = $this->get_transient( $this->queue_key, array() );
 				if ( ! empty( $queue ) ) {
 					foreach ( $queue as $key => $file ) {
 						list( $id, $type ) = explode( '_', $key );
@@ -286,20 +287,20 @@ class AudioVideoTranscoding extends AVSingleton {
 			$this->last_progress = $this->progress;
 
 			$encode_key = $this->id . '_' . $this->type;
-			$encodes = get_transient( $this->encode_key );
+			$encodes = $this->get_transient( $this->encode_key, array() );
 			$encodes[ $encode_key ] = $percentage;
 			set_transient( $this->encode_key, $encodes );
 		}
 	}
 
 	function remove_encode( $encode_key ) {
-		$encodes = get_transient( $this->encode_key );
+		$encodes = $this->get_transient( $this->encode_key, array() );
 		unset( $encodes[ $encode_key ] );
 		set_transient( $this->encode_key, $encodes );
 	}
 
 	function add_to_failed( $encode_key, $type_file ) {
-		$failed = get_transient( $this->failed_key );
+		$failed = $this->get_transient( $this->failed_key, array() );
 		$failed[ $encode_key ] = $type_file;
 		set_transient( $this->failed_key, $failed );
 	}

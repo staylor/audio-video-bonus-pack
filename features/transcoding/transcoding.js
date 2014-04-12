@@ -101,6 +101,8 @@
 		initialize: function () {
 			_.bindAll(this, 'read', 'fetch');
 
+			this.$view = $('#av-queue');
+
 			this.queue = new AVQueueController();
 			this.encodes = new AVEncodeController();
 
@@ -117,12 +119,18 @@
 		},
 
 		read : function (response) {
-			var data = $.parseJSON( response );
+			var data = $.parseJSON( response ), timeout = 3000;
 
 			this.encodes.items.reset( data.encodes );
 			this.queue.items.reset( data.queue );
 
-			setTimeout(this.fetch, 5000);
+			if ( ! data.encodes.length && ! data.queue.length ) {
+				timeout = 10000;
+				this.$view.hide();
+			} else {
+				this.$view.show();
+			}
+			setTimeout(this.fetch, timeout);
 		}
 	});
 

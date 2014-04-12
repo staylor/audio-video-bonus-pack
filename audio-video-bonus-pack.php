@@ -31,6 +31,15 @@ abstract class AVSingleton {
 			error_log( $message );
 		}
 	}
+
+	function get_transient( $key, $default ) {
+		$value = get_transient( $key );
+		if ( empty( $value ) ) {
+			return $default;
+		}
+
+		return $value;
+	}
 }
 
 class AudioVideoBonusPack extends AVSingleton {

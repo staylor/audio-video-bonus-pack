@@ -1,3 +1,7 @@
+#av-queue {
+	display: none;
+}
+
 .av-encoding-item-bar {
 	background: #ddd;
 	height: 20px;
@@ -11,4 +15,13 @@
 	height: 20px;
 	position: absolute;
 	border-radius: 10px 10px;
+	-webkit-transition-duration: 400ms;
+	-webkit-transition-property: width;
+	-webkit-transition-timing-function: ease;
+	-moz-transition-duration: 400ms;
+	-moz-transition-property: width;
+	-moz-transition-timing-function: ease;
+	-o-transition-duration: 400ms;
+	-o-transition-property: width;
+	-o-transition-timing-function: ease;
 }
