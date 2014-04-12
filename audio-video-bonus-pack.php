@@ -85,6 +85,10 @@ class AudioVideoBonusPack {
 	 * @param int $id
 	 */
 	function add_to_queue( $id ) {
+		if ( get_post_meta( $id, '_is_fallback', true ) ) {
+			return;
+		}
+
 		$file = get_attached_file( $id );
 		$ext = wp_check_filetype( $file );
 		$base = basename( $file );
@@ -92,14 +96,53 @@ class AudioVideoBonusPack {
 
 		$encodes = get_transient( $this->encode_key );
 		$queue = get_transient( $this->queue_key );
+		$fallbacks = array();
 
-		foreach ( array( 'ogv', 'webm' ) as $type ) {
+		switch ( $ext['ext'] ) {
+		case 'wma':
+		case 'wav':
+		case 'm4a':
+			$fallbacks = array( 'mp3', 'ogg' );
+			break;
+
+		case 'ogg':
+			$fallbacks[] = 'mp3';
+			break;
+
+		case 'mp3':
+			$fallbacks[] = 'ogg';
+			break;
+
+		case 'm4v':
+		case 'mp4':
+			$fallbacks = array( 'ogv', 'webm' );
+			break;
+
+		case 'webm':
+			$fallbacks[] = 'ogv';
+			break;
+
+		case 'ogv':
+			$fallbacks[] = 'webm';
+			break;
+
+		case 'mov':
+		case 'wmv':
+			$fallbacks = array( 'webm', 'ogv' );
+			break;
+		}
+
+		foreach ( $fallbacks as $type ) {
 			$key = '_' . $type . '_fallback';
 			$meta = get_post_meta( $id, $key, true );
 			$encode_key = $id . '_' . $type;
+			$new_file = $front . rtrim( $base, $ext['ext'] ) . $type;
 
-			if ( empty( $meta ) && ! isset( $encodes[ $encode_key ] ) && ! isset( $queue[ $encode_key ] ) ) {
-				$queue[ $encode_key ] = $front . rtrim( $base, $ext['ext'] ) . $type;
+			if ( empty( $meta )
+				&& ! file_exists( $new_file )
+				&& ! isset( $encodes[ $encode_key ] )
+				&& ! isset( $queue[ $encode_key ] ) ) {
+				$queue[ $encode_key ] = $new_file;
 			}
 		}
 
@@ -124,10 +167,14 @@ class AudioVideoBonusPack {
 		switch ( $_GET['action'] ) {
 		case 'av_delete_queue':
 			delete_transient( $this->queue_key );
-			break;
+			wp_safe_redirect( wp_get_referer() );
+			exit();
+
 		case 'av_delete_failed':
 			delete_transient( $this->failed_key );
-			break;
+			wp_safe_redirect( wp_get_referer() );
+			exit();
+
 		case 'av_encode':
 			$encodes = get_transient( $this->encode_key );
 			if ( empty( $encodes ) ) {
@@ -192,32 +239,61 @@ class AudioVideoBonusPack {
 	 * @param string $type_file
 	 */
 	function encode_media( $id, $type, $type_file ) {
+		$encode_key = $id . '_' . $type;
+		if ( file_exists( $type_file ) ) {
+			$encodes = get_transient( $this->encode_key );
+			unset( $encodes[ $encode_key ] );
+			set_transient( $this->encode_key, $encodes );
+			return;
+		}
+
 		$this->id = $id;
 		$this->type = $type;
 
 		$file = get_attached_file( $id );
 		$ffmpeg = $this->get_ffmpeg();
-		$video = $ffmpeg->open( $file );
+		$media = $ffmpeg->open( $file );
 
 		$attachment = get_post( $id, ARRAY_A );
 		$props = $attachment;
-		unset( $props['post_mime_type'], $props['guid'], $props['post_name'], $props['ID'] );
+		unset(
+			$props['post_modified_gmt'],
+			$props['post_modified'],
+			$props['post_mime_type'],
+			$props['guid'],
+			$props['post_name'],
+			$props['ID']
+		);
 		$thumbnail_id = get_post_thumbnail_id( $id );
 
 		$key = '_' . $type . '_fallback';
-		$encode_key = $id . '_' . $type;
 
 		try {
 			switch ( $type ) {
+			case 'mp3':
+				$format = new FFMpeg\Format\Audio\Mp3();
+				$format->on( 'progress', array( $this, 'do_progress' ) );
+				$media->save( $format, $type_file );
+				break;
+			case 'ogg':
+				$format = new FFMpeg\Format\Audio\Vorbis();
+				$format->on( 'progress', array( $this, 'do_progress' ) );
+				$media->save( $format, $type_file );
+				break;
 			case 'ogv':
 				$format = new FFMpeg\Format\Video\Ogg();
 				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$video->save( $format, $type_file );
+				$media->save( $format, $type_file );
 				break;
 			case 'webm':
 				$format = new FFMpeg\Format\Video\WebM();
 				$format->on( 'progress', array( $this, 'do_progress' ) );
-				$video->save( $format, $type_file );
+				$media->save( $format, $type_file );
+				break;
+			case 'mp4':
+				$format = new FFMpeg\Format\Video\X264();
+				$format->on( 'progress', array( $this, 'do_progress' ) );
+				$media->save( $format, $type_file );
 				break;
 			}
 		} catch ( Exception $e ) {
@@ -228,7 +304,7 @@ class AudioVideoBonusPack {
 			set_transient( $this->encode_key, $encodes );
 
 			$failed = get_transient( $this->failed_key );
-			$failed[ $encode_key ] = $file;
+			$failed[ $encode_key ] = $type_file;
 			set_transient( $this->failed_key, $failed );
 
 			$this->check_queue();
@@ -240,6 +316,7 @@ class AudioVideoBonusPack {
 
 		$attachment_id = wp_insert_attachment( $props, $type_file );
 		update_post_meta( $id, $key, $attachment_id );
+		update_post_meta( $attachment_id, '_is_fallback', true );
 
 		if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
 			require_once( ABSPATH . 'wp-admin/includes/media.php' );
@@ -271,10 +348,21 @@ class AudioVideoBonusPack {
 		$ext = wp_check_filetype( $file );
 
 		switch ( $ext['type'] ) {
+		case 'audio/x-ms-wma':
+		case 'audio/ogg':
+		case 'audio/wav':
+		case 'audio/m4a':
+		case 'audio/mpeg':
+		case 'video/ogg':
+		case 'video/webm':
+		case 'video/mpeg':
 		case 'video/mp4':
+		case 'video/m4v':
+		case 'video/quicktime':
+		case 'video/x-ms-wmv':
 			$url = add_query_arg( array(
+				'media_id' => $post_id,
 				'action' => 'av_queue',
-				'media_id' => $post_id
 			), home_url( '/' ) );
 
 			$nonced = html_entity_decode( wp_nonce_url( $url, 'av_queue' ) );
@@ -317,7 +405,7 @@ class AudioVideoBonusPack {
 	function ffmpeg_encoding_notice() {
 		$size = count( $this->encodes );
 		$message = 1 === $size ? '1 media file that is' : "$size media files that are";
-	?>
+		if ( ! empty( $this->encodes ) || ! empty( $this->queue ) ): ?>
 <div class="updated">
 	<?php if ( ! empty( $this->encodes ) ): ?>
 	<p><strong>Encoding media</strong> You have <?php echo $message ?> being encoded....</p>
@@ -331,8 +419,14 @@ class AudioVideoBonusPack {
 
 	<?php
 	if ( ! empty( $this->queue ) ):
-		foreach ( $this->queue as $key => $file ): ?>
-		<p><?php printf( '<strong>Queued for creation:</strong> %s', $file ); ?></p>
+		foreach ( $this->queue as $key => $file ):
+			if ( isset( $this->encodes[ $key ] ) ) {
+				continue;
+			}
+		?>
+		<p><?php
+		$path = ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' );
+		printf( '<strong>Queued for creation:</strong> %s', $path ); ?></p>
 	<?php endforeach; ?>
 		<p><a href="<?php
 			$url = add_query_arg( 'action', 'av_delete_queue', home_url( '/' ) );
@@ -340,10 +434,14 @@ class AudioVideoBonusPack {
 	<?php endif; ?>
 </div>
 	<?php
+		endif;
+
 	if ( ! empty( $this->failed ) ): ?>
 <div class="error">
 	<?php foreach ( $this->failed as $key => $file ): ?>
-	<p><?php printf( '<strong>Transcoding failed:</strong> %s', $file ); ?></p>
+	<p><?php
+		$path = ltrim( str_replace( $_SERVER['DOCUMENT_ROOT'], '', $file ), '/' );
+		printf( '<strong>Transcoding failed:</strong> %s', $path ); ?></p>
 	<?php endforeach ?>
 	<p><a href="<?php
 		$url = add_query_arg( 'action', 'av_delete_failed', home_url( '/' ) );
