@@ -112,6 +112,7 @@
 		fetch : function () {
 			$.ajax({
 				url : ajaxurl,
+				cache: false,
 				data : {
 					action : 'av-read-queue'
 				}
@@ -125,7 +126,7 @@
 			this.queue.items.reset( data.queue );
 
 			if ( ! data.encodes.length && ! data.queue.length ) {
-				timeout = 10000;
+				timeout = 9000;
 				this.$view.hide();
 			} else {
 				this.$view.show();

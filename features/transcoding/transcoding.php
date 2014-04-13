@@ -61,13 +61,15 @@ class AudioVideoTranscoding extends AVSingleton {
 		$encodes = array();
 
 		if ( ! empty( $this->encodes ) ) {
-			foreach ( $this->encodes as $key => $progress ) {
+			foreach ( $this->encodes as $key => $exists ) {
 				list( $id, $type ) = explode( '_', $key );
+
+				$progress = $this->get_transient( $key . '_progress', 1 );
 
 				$encodes[] = array(
 					'pid' => $id,
 					'type' => strtoupper( $type ),
-					'progress' => min( 100, $progress + 1 ),
+					'progress' => $progress,
 					'title' => get_the_title( $id )
 				);
 			}
@@ -270,33 +272,11 @@ class AudioVideoTranscoding extends AVSingleton {
 		}
 	}
 
-	/**
-	 * Update the progress of a processing item
-	 *
-	 * @param mixed $media
-	 * @param mixed $format
-	 * @param int $percentage
-	 */
-	function do_progress( $media, $format, $percentage ) {
-		$this->progress = $percentage;
-		if ( ! isset( $this->last_progress ) ) {
-			$this->last_progress = $this->progress;
-		}
-
-		if ( $this->progress && $this->progress !== $this->last_progress ) {
-			$this->last_progress = $this->progress;
-
-			$encode_key = $this->id . '_' . $this->type;
-			$encodes = $this->get_transient( $this->encode_key, array() );
-			$encodes[ $encode_key ] = $percentage;
-			set_transient( $this->encode_key, $encodes );
-		}
-	}
-
 	function remove_encode( $encode_key ) {
 		$encodes = $this->get_transient( $this->encode_key, array() );
 		unset( $encodes[ $encode_key ] );
 		set_transient( $this->encode_key, $encodes );
+		delete_transient( $encode_key . '_progress' );
 	}
 
 	function add_to_failed( $encode_key, $type_file ) {
@@ -324,6 +304,12 @@ class AudioVideoTranscoding extends AVSingleton {
 		$this->type = $type;
 
 		$file = get_attached_file( $id );
+		if ( 'm4a' === substr( $file, -3 ) && 'ogg' === $type ) {
+			$fallback = get_post_meta( $id, '_mp3_fallback', true );
+			if ( ! empty( $fallback ) ) {
+				$file = get_attached_file( $fallback );
+			}
+		}
 
 		// Autoload PHP-FFMpeg + dependencies
 		require_once( AV_DIR . '/vendor/autoload.php' );
@@ -342,6 +328,7 @@ class AudioVideoTranscoding extends AVSingleton {
 			$props['ID']
 		);
 		$thumbnail_id = get_post_thumbnail_id( $id );
+		$original_meta = wp_get_attachment_metadata( $id );
 
 		$key = '_' . $type . '_fallback';
 
@@ -364,7 +351,20 @@ class AudioVideoTranscoding extends AVSingleton {
 				break;
 			}
 
-			$format->on( 'progress', array( $this, 'do_progress' ) );
+			$progress_key = $id . '_' . $type . '_' . 'progress';
+			$format->on( 'progress', function ( $media, $format, $percentage ) use ( $progress_key ) {
+				static $last_progress = false;
+
+				if ( ! $last_progress ) {
+					$last_progress = $percentage;
+				}
+
+				if ( $percentage && $percentage !== $last_progress ) {
+					$last_progress = $percentage;
+
+					set_transient( $progress_key, $last_progress );
+				}
+			} );
 			$media->save( $format, $type_file );
 		} catch ( Exception $e ) {
 			$this->log( 'Caught exception: ' . $e->getMessage() );
@@ -388,6 +388,13 @@ class AudioVideoTranscoding extends AVSingleton {
 		}
 
 		$attach_data = wp_generate_attachment_metadata( $attachment_id, $type_file );
+
+		foreach ( wp_get_attachment_id3_keys( $attachment, 'display' ) as $key ) {
+			if ( ! empty( $original_meta[ $key ] ) ) {
+				$attach_data[ $key ] = $original_meta[ $key ];
+			}
+		}
+
 		wp_update_attachment_metadata( $attachment_id, $attach_data );
 
 		if ( ! empty( $thumbnail_id ) ) {
