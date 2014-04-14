@@ -1,5 +1,16 @@
-Audio/Video Bonus Pack
-======================
+=== Audio/Video Bonus Pack ===
+Contributors: wonderboymusic
+Donate link: http://http://scotty-t.com/
+Tags: media, audio, video
+Requires at least: 3.9
+Tested up to: 3.9
+Stable tag: trunk
+License: GPLv2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+
+Audio/Video extras not found in WordPress core.
+
+== Description ==
 
 Audio/Video extras not found in WordPress core.
 
