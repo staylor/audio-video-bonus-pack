@@ -203,9 +203,10 @@ class AudioVideoTranscoding extends AVSingleton {
 			$new_file = $front . rtrim( $base, $ext['ext'] ) . $type;
 
 			if ( empty( $meta )
-				&& ! file_exists( $new_file )
+				&& ! in_array( $new_file, $queue )
 				&& ! isset( $encodes[ $encode_key ] )
-				&& ! isset( $queue[ $encode_key ] ) ) {
+				&& ! isset( $queue[ $encode_key ] )
+				&& ! file_exists( $new_file ) ) {
 				$queue[ $encode_key ] = $new_file;
 			}
 		}
