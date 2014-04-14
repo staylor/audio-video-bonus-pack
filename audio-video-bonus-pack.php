@@ -42,16 +42,28 @@ abstract class AVSingleton {
 	}
 }
 
+/**
+ * The main plugin controller
+ * - conditionally loads other plugins
+ * - creates feature flags
+ */
 class AudioVideoBonusPack extends AVSingleton {
 	/**
 	 * Sandbox actions and filters
 	 */
 	protected function __construct() {
+		parent::__construct();
+
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
 
 		if ( get_option( 'av_transcoding_enabled', 1 ) ) {
 			require( AV_DIR . '/features/transcoding/transcoding.php' );
-			AudioVideoTranscoding::get_instance();
+			AVTranscoding::get_instance();
+		}
+
+		if ( get_option( 'av_embed_views_enabled', 1 ) ) {
+			require( AV_DIR . '/features/embeds/embeds.php' );
+			AVEmbeds::get_instance();
 		}
 	}
 
@@ -61,6 +73,8 @@ class AudioVideoBonusPack extends AVSingleton {
 	function admin_init() {
 		add_settings_section( 'av-settings', __( 'Audio/Video Settings' ), array( $this, 'settings' ), 'media' );
 
+		register_setting( 'media', 'av_embed_views_enabled' );
+		add_settings_field( 'av-embed_views_enabled', __( 'Show Previews of Embedded Media' ), array( $this, 'field_embed_views_enabled' ), 'media', 'av-settings' );
 		register_setting( 'media', 'av_transcoding_enabled' );
 		add_settings_field( 'av-transcoding-enabled', __( 'Automatically generate HTML5 fallbacks' ), array( $this, 'field_transcoding_enabled' ), 'media', 'av-settings' );
 	}
@@ -72,6 +86,16 @@ class AudioVideoBonusPack extends AVSingleton {
 		$option = get_option( 'av_transcoding_enabled', 1 );
 	?>
 	<input type="checkbox" name="av_transcoding_enabled" value="1" <?php checked( $option, 1 ) ?>/>
+	<?php
+	}
+
+	/**
+	 * Output the 'av_embed_views_enabled' field
+	 */
+	function field_embed_views_enabled() {
+		$option = get_option( 'av_embed_views_enabled', 1 );
+	?>
+	<input type="checkbox" name="av_embed_views_enabled" value="1" <?php checked( $option, 1 ) ?>/>
 	<?php
 	}
 

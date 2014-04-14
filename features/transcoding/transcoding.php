@@ -8,7 +8,7 @@
 
 define( 'AV_ENCODE_MAX', 1 );
 
-class AudioVideoTranscoding extends AVSingleton {
+class AVTranscoding extends AVSingleton {
 	private $encode_key = 'av_encoding_media';
 	private $queue_key = 'av_media_queue';
 	private $failed_key = 'av_media_failed';
