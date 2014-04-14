@@ -62,7 +62,7 @@ abstract class AVSingleton {
 		setup_postdata( $post );
 
 		$content = wp_unslash( $_POST['oembed_content'] );
-		if ( preg_match( '/' . get_shortcode_regex() . '/s', $content ) ) {
+		if ( preg_match( '/' . get_shortcode_regex() . '/s', $content ) && ! has_shortcode( $content, 'embed' ) ) {
 			$parsed = do_shortcode( $content );
 		} else {
 			$parsed = apply_filters( 'the_content', $content );
