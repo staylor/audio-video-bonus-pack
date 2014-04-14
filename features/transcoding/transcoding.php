@@ -301,9 +301,6 @@ class AVTranscoding extends AVSingleton {
 			return;
 		}
 
-		$this->id = $id;
-		$this->type = $type;
-
 		$file = get_attached_file( $id );
 		if ( 'm4a' === substr( $file, -3 ) && 'ogg' === $type ) {
 			$fallback = get_post_meta( $id, '_mp3_fallback', true );
@@ -369,6 +366,8 @@ class AVTranscoding extends AVSingleton {
 			$media->save( $format, $type_file );
 		} catch ( Exception $e ) {
 			$this->log( 'Caught exception: ' . $e->getMessage() );
+
+			unlink( $type_file );
 
 			$this->remove_encode( $encode_key );
 			$this->add_to_failed( $encode_key, $type_file );
