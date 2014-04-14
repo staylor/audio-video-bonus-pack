@@ -16,11 +16,17 @@ class AVSoundCloud extends AVSingleton {
 	}
 
 	function shortcode( $atts ) {
+		global $wp_embed;
+
 		$defaults = array(
-			'src' => ''
+			'url' => '',
+			'width' => '',
+			'height' => ''
 		);
 		$params = wp_parse_args( $atts, $defaults );
-		return $params['src'];
+		$url = $params['url'];
+		unset( $params['url'] );
+		return $wp_embed->shortcode( $params, $url );
 	}
 
 	function enqueue() {
@@ -37,7 +43,21 @@ class AVSoundCloud extends AVSingleton {
 	<script type="text/html" id="tmpl-av-soundcloud-details">
 		<div class="media-embed">
 			<div class="embed-media-settings">
-				{{{ wp.media.embedCache[ data.model.url ] }}}
+				<# console.log( data ) #>
+				{{{ wp.media.embedCache[ data.model.key ] }}}
+
+				<label class="setting">
+					<span><?php _e('URL'); ?></span>
+					<input type="text" data-setting="url" value="{{ data.model.url }}" />
+				</label>
+				<label class="setting">
+					<span><?php _e('WIDTH'); ?></span>
+					<input type="text" data-setting="width" value="{{ data.model.width ? data.model.width : '' }}" />
+				</label>
+				<label class="setting">
+					<span><?php _e('HEIGHT'); ?></span>
+					<input type="text" data-setting="height" value="{{ data.model.height ? data.model.height : '' }}" />
+				</label>
 			</div>
 		</div>
 	</script>
@@ -47,7 +67,7 @@ class AVSoundCloud extends AVSingleton {
 			<div class="dashicons dashicons-edit edit"></div>
 			<div class="dashicons dashicons-no-alt remove"></div>
 		</div>
-		<div class="av-replace-soundcloud">{{{ data.url }}}</div>
+		<div class="av-soundcloud-embed av-replace-soundcloud">{{{ data.url }}}</div>
 	</script>
 	<?php
 	}

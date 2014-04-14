@@ -5,6 +5,10 @@
 
 	var media = wp.media, embedCache = {},
 
+	makeKey = function (obj) {
+		return obj.url + obj.width.toString() + obj.height.toString();
+	},
+
 	SoundCloudDetailsController = media.controller.State.extend({
 		defaults: {
 			id: 'av-soundcloud-details',
@@ -121,15 +125,21 @@
 		coerce : media.coerce,
 
 		defaults : {
-			url : ''
+			url : '',
+			width: 0,
+			height: 0
 		},
 
 		edit : function ( data ) {
-			var frame, shortcode = wp.shortcode.next( 'soundcloud', data ).shortcode;
+			var frame, shortcode = wp.shortcode.next( 'soundcloud', data ).shortcode,
+				attrs = _.defaults( shortcode.attrs.named, soundcloud.defaults );
+
+			attrs.key = makeKey( attrs );
+
 			frame = new SoundCloudDetailsFrame({
 				frame: 'av-soundcloud',
 				state: 'av-soundcloud-details',
-				metadata: _.defaults( shortcode.attrs.named, soundcloud.defaults )
+				metadata: attrs
 			});
 
 			return frame;
@@ -148,6 +158,7 @@
 
 			content = model.content;
 			delete model.content;
+			delete model.key;
 
 			return new wp.shortcode({
 				tag: 'soundcloud',
@@ -181,6 +192,8 @@
 					this.shortcode.attrs.named,
 					soundcloud.defaults
 				);
+				this.key = makeKey( this.attrs );
+				this.parsedShortcode = soundcloud.shortcode( this.attrs ).string();
 				this.parsed = false;
 				_.bindAll( this, 'setHtml', 'setNode', 'fetch' );
 				$(this).bind('ready', this.setNode);
@@ -196,23 +209,25 @@
 			},
 
 			replaceMarker: function() {
-				$( '.av-replace-soundcloud', this.node ).replaceWith( this.parsed );
+				$( '.av-replace-soundcloud', this.node ).html( this.parsed ).show();
 			},
 
 			fetch: function () {
+				var attrs = this.attrs;
+
 				$.ajax( {
 					url : ajaxurl,
 					type : 'post',
 					data : {
 						action: 'av-parse-content',
 						post_ID: $( '#post_ID' ).val(),
-						oembed_content: this.attrs.url
+						oembed_content: this.parsedShortcode
 					}
 				} ).done( this.setHtml );
 			},
 
 			setHtml: function (data) {
-				embedCache[ this.attrs.url ] = this.parsed = data.content;
+				embedCache[ this.key ] = this.parsed = data.content;
 				this.replaceMarker();
 			},
 

@@ -4,6 +4,11 @@
 	"use strict";
 
 	var embed = {
+		width : 0,
+		height: 0
+	},
+
+	embedMce = {
 		toView:  function( content ) {
 			var match = wp.shortcode.next( 'embed', content );
 
@@ -25,6 +30,7 @@
 				this.players = [];
 				this.content = options.content;
 				this.parsed = false;
+				this.shortcode = options.shortcode;
 				_.bindAll( this, 'setHtml', 'setNode', 'fetch' );
 				$(this).on( 'ready', this.setNode );
 			},
@@ -54,7 +60,7 @@
 					data : {
 						action: 'av-parse-content',
 						post_ID: $( '#post_ID' ).val(),
-						oembed_content: this.content
+						oembed_content: this.shortcode.string()
 					}
 				} ).done( this.setHtml );
 			},
@@ -83,6 +89,6 @@
 
 		edit: function() {}
 	};
-	_.extend( embed.View.prototype, wp.media.mixin );
-	wp.mce.views.register( 'embed', embed );
+	_.extend( embedMce.View.prototype, wp.media.mixin );
+	wp.mce.views.register( 'embed', embedMce );
 }(jQuery, _, wp));
