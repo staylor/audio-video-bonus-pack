@@ -16,22 +16,15 @@ define( 'AV_LOG', false );
 define( 'AV_DIR', __DIR__ );
 
 abstract class AVSingleton {
-	protected static $instance;
+	protected static $instance = array();
 	public static function get_instance() {
 		$c = get_called_class();
-		if ( ! self::$instance instanceof $c ) {
-			self::$instance = new $c;
+		if ( ! isset( self::$instance[ $c ] ) ) {
+			self::$instance[ $c ] = new $c;
 		}
-		return self::$instance;
+		return self::$instance[ $c ];
 	}
-	protected function __construct() {
-		global $wp_filter;
-
-		$tag = 'wp_ajax_av-parse-content';
-		if ( empty( $wp_filter[ $tag ] ) ) {
-			add_action( $tag, array( $this, 'parse_content' ) );
-		}
-	}
+	protected function __construct() {}
 
 	function log( $message ) {
 		if ( AV_LOG ) {
@@ -46,29 +39,6 @@ abstract class AVSingleton {
 		}
 
 		return $value;
-	}
-
-	function parse_content() {
-		global $post;
-
-		if ( ! $post = get_post( (int) $_REQUEST['post_ID'] ) ) {
-			wp_send_json_error();
-		}
-
-		if ( ! current_user_can( 'read_post', $post->ID ) ) {
-			wp_send_json_error();
-		}
-
-		setup_postdata( $post );
-
-		$content = wp_unslash( $_POST['oembed_content'] );
-		if ( preg_match( '/' . get_shortcode_regex() . '/s', $content ) && ! has_shortcode( $content, 'embed' ) ) {
-			$parsed = do_shortcode( $content );
-		} else {
-			$parsed = apply_filters( 'the_content', $content );
-		}
-
-		wp_send_json( array( 'content' => $parsed ) );
 	}
 }
 
@@ -91,15 +61,10 @@ class AudioVideoBonusPack extends AVSingleton {
 			AVTranscoding::get_instance();
 		}
 
-		if ( get_option( 'av_embed_views_enabled', 1 ) ) {
-			require( AV_DIR . '/features/embeds/embeds.php' );
-			AVEmbeds::get_instance();
-		}
-
-		if ( get_option( 'av_soundcloud_manager_enabled', 1 ) ) {
-			require( AV_DIR . '/features/soundcloud/soundcloud.php' );
-			AVSoundCloud::get_instance();
-		}
+//		if ( get_option( 'av_soundcloud_manager_enabled', 1 ) ) {
+//			require( AV_DIR . '/features/soundcloud/soundcloud.php' );
+//			AVSoundCloud::get_instance();
+//		}
 	}
 
 	/**
@@ -108,8 +73,6 @@ class AudioVideoBonusPack extends AVSingleton {
 	function admin_init() {
 		add_settings_section( 'av-settings', __( 'Audio/Video Settings' ), array( $this, 'settings' ), 'media' );
 
-		register_setting( 'media', 'av_embed_views_enabled' );
-		add_settings_field( 'av-embed_views_enabled', __( 'Show Previews of Embedded Media' ), array( $this, 'field_embed_views_enabled' ), 'media', 'av-settings' );
 		register_setting( 'media', 'av_soundcloud_manager_enabled' );
 		add_settings_field( 'av-soundcloud_manager_enabled', __( 'Add Advanced SoundCloud support' ), array( $this, 'field_soundcloud_manager_enabled' ), 'media', 'av-settings' );
 		register_setting( 'media', 'av_transcoding_enabled' );
@@ -123,16 +86,6 @@ class AudioVideoBonusPack extends AVSingleton {
 		$option = get_option( 'av_transcoding_enabled', 1 );
 	?>
 	<input type="checkbox" name="av_transcoding_enabled" value="1" <?php checked( $option, 1 ) ?>/>
-	<?php
-	}
-
-	/**
-	 * Output the 'av_embed_views_enabled' field
-	 */
-	function field_embed_views_enabled() {
-		$option = get_option( 'av_embed_views_enabled', 1 );
-	?>
-	<input type="checkbox" name="av_embed_views_enabled" value="1" <?php checked( $option, 1 ) ?>/>
 	<?php
 	}
 
