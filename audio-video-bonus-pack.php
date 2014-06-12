@@ -61,10 +61,10 @@ class AudioVideoBonusPack extends AVSingleton {
 			AVTranscoding::get_instance();
 		}
 
-//		if ( get_option( 'av_soundcloud_manager_enabled', 1 ) ) {
-//			require( AV_DIR . '/features/soundcloud/soundcloud.php' );
-//			AVSoundCloud::get_instance();
-//		}
+		if ( get_option( 'av_soundcloud_manager_enabled', 1 ) ) {
+			require( AV_DIR . '/features/soundcloud/soundcloud.php' );
+			AVSoundCloud::get_instance();
+		}
 	}
 
 	/**

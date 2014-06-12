@@ -30,7 +30,7 @@ class AVSoundCloud extends AVSingleton {
 	}
 
 	function enqueue() {
-		add_action( 'admin_footer', array( $this, 'print_templates' ) );
+		add_action( 'print_media_templates', array( $this, 'print_templates' ) );
 
 		$css_src = plugins_url( 'soundcloud.css', __FILE__ );
 		$js_src = plugins_url( 'soundcloud.js', __FILE__ );
@@ -43,8 +43,7 @@ class AVSoundCloud extends AVSingleton {
 	<script type="text/html" id="tmpl-av-soundcloud-details">
 		<div class="media-embed">
 			<div class="embed-media-settings">
-				<# console.log( data ) #>
-				{{{ wp.media.embedCache[ data.model.key ] }}}
+				<div class="soundcloud-preview"></div>
 
 				<label class="setting">
 					<span><?php _e('URL'); ?></span>
@@ -67,7 +66,8 @@ class AVSoundCloud extends AVSingleton {
 			<div class="dashicons dashicons-edit edit"></div>
 			<div class="dashicons dashicons-no-alt remove"></div>
 		</div>
-		<div class="av-soundcloud-embed av-replace-soundcloud">{{{ data.url }}}</div>
+		{{{ data.content }}}
+		<div class="wpview-overlay"></div>
 	</script>
 	<?php
 	}

@@ -5,10 +5,6 @@
 
 	var media = wp.media, embedCache = {},
 
-	makeKey = function (obj) {
-		return obj.url + obj.width.toString() + obj.height.toString();
-	},
-
 	SoundCloudDetailsController = media.controller.State.extend({
 		defaults: {
 			id: 'av-soundcloud-details',
@@ -26,13 +22,42 @@
 		}
 	}),
 
-	SoundCloudDetailsView = media.view.Settings.AttachmentDisplay.extend({
+	SoundCloudDetailsView = media.view.Settings.extend({
 		className: 'av-soundcloud-details',
 		template:  media.template( 'av-soundcloud-details' ),
+		initialize: function() {
+			this.model.on( 'change', this.render, this );
+		},
+
 		prepare: function() {
 			return _.defaults( {
 				model: this.model.toJSON()
 			}, this.options );
+		},
+
+		render: function() {
+			/**
+			 * Call `render` directly on parent class with passed arguments
+			 */
+			media.View.prototype.render.apply( this, arguments );
+
+			this.fetch();
+			return this;
+		},
+
+		fetch: function() {
+			this.parsed = false;
+			wp.ajax.send( 'parse-embed', {
+				data: {
+					post_ID: $( '#post_ID' ).val(),
+					content: '[embed]' + this.model.get('url') + '[/embed]'
+				}
+			} ).done( _.bind( this.setHtml, this ) );
+		},
+
+		setHtml: function ( content ) {
+			this.parsed = content;
+			this.$( '.soundcloud-preview' ).html( content );
 		}
 	}),
 
@@ -134,8 +159,6 @@
 			var frame, shortcode = wp.shortcode.next( 'soundcloud', data ).shortcode,
 				attrs = _.defaults( shortcode.attrs.named, soundcloud.defaults );
 
-			attrs.key = makeKey( attrs );
-
 			frame = new SoundCloudDetailsFrame({
 				frame: 'av-soundcloud',
 				state: 'av-soundcloud-details',
@@ -166,25 +189,10 @@
 				content: content
 			});
 		}
-	},
-	soundcloudMce = {
-		toView:  function( content ) {
-			var match = wp.shortcode.next( 'soundcloud', content );
+	};
 
-			if ( ! match ) {
-				return;
-			}
-
-			return {
-				index:   match.index,
-				content: match.content,
-				options: {
-					shortcode: match.shortcode
-				}
-			};
-		},
-		View: wp.mce.View.extend({
-			className: 'editor-av-soundcloud',
+	wp.mce.views.register( 'soundcloud', {
+		View: {
 			template:  media.template( 'editor-av-soundcloud' ),
 			initialize: function( options ) {
 				this.shortcode = options.shortcode;
@@ -192,10 +200,8 @@
 					this.shortcode.attrs.named,
 					soundcloud.defaults
 				);
-				this.key = makeKey( this.attrs );
-				this.parsedShortcode = soundcloud.shortcode( this.attrs ).string();
 				this.parsed = false;
-				_.bindAll( this, 'setHtml', 'setNode', 'fetch' );
+				_.bindAll( this, 'setNode', 'fetch' );
 				$(this).bind('ready', this.setNode);
 			},
 
@@ -203,38 +209,30 @@
 				this.node = node;
 				if ( ! this.parsed ) {
 					this.fetch();
-				} else {
-					this.replaceMarker();
 				}
 			},
 
-			replaceMarker: function() {
-				$( '.av-replace-soundcloud', this.node ).html( this.parsed ).show();
-			},
-
 			fetch: function () {
-				var attrs = this.attrs;
-
-				$.ajax( {
-					url : ajaxurl,
-					type : 'post',
-					data : {
-						action: 'av-parse-content',
+				wp.ajax.send( 'parse-embed', {
+					data: {
 						post_ID: $( '#post_ID' ).val(),
-						oembed_content: this.parsedShortcode
+						content: '[embed]' + this.shortcode.attrs.named.url + '[/embed]'
 					}
-				} ).done( this.setHtml );
+				} ).done( _.bind( this.setHtml, this ) );
 			},
 
-			setHtml: function (data) {
-				embedCache[ this.key ] = this.parsed = data.content;
-				this.replaceMarker();
+			setHtml: function ( content ) {
+				this.parsed = content;
+				$( this.node ).html( this.getHtml() );
 			},
 
 			getHtml: function() {
-				return this.template( this.attrs );
+				if ( ! this.parsed ) {
+					return '';
+				}
+				return this.template({ content: this.parsed });
 			}
-		}),
+		},
 
 		edit: function( node ) {
 			var self = this, frame, data;
@@ -249,8 +247,7 @@
 			});
 			frame.open();
 		}
-	};
+	} );
 
 	media.embedCache = embedCache;
-	wp.mce.views.register( 'soundcloud', soundcloudMce );
 }(jQuery, _, Backbone, wp));
