@@ -6,27 +6,25 @@
  * @subpackage Soundcloud
  */
 
+define( 'SOUNDCLOUD_CLIENT_ID', '' );
+
 class AVSoundCloud extends AVSingleton {
 	protected function __construct() {
 		parent::__construct();
 
-		add_shortcode( 'soundcloud', array( $this, 'shortcode' ) );
+		add_action( 'media_buttons', array( $this, 'media_buttons' ) );
 		add_action( 'load-post.php', array( $this, 'enqueue' ) );
 		add_action( 'load-post-new.php', array( $this, 'enqueue' ) );
 	}
 
-	function shortcode( $atts ) {
-		global $wp_embed;
-
-		$defaults = array(
-			'url' => '',
-			'width' => '',
-			'height' => ''
-		);
-		$params = wp_parse_args( $atts, $defaults );
-		$url = $params['url'];
-		unset( $params['url'] );
-		return $wp_embed->shortcode( $params, $url );
+	function media_buttons() {
+?>
+<a href="#" class="button add-soundcloud" title="<?php
+	esc_attr_e( 'Add Soundcloud' );
+?>"><?php
+	_e( 'Add Soundcloud' );
+?></a>
+<?php
 	}
 
 	function enqueue() {
@@ -35,40 +33,66 @@ class AVSoundCloud extends AVSingleton {
 		$css_src = plugins_url( 'soundcloud.css', __FILE__ );
 		$js_src = plugins_url( 'soundcloud.js', __FILE__ );
 		wp_enqueue_style( 'av-soundcloud', $css_src );
-		wp_enqueue_script( 'av-soundcloud', $js_src, array( 'mce-view' ), '', true );
+		wp_register_script( 'soundcloud-sdk', 'http://connect.soundcloud.com/sdk.js' );
+		wp_enqueue_script( 'av-soundcloud', $js_src, array( 'soundcloud-sdk', 'mce-view' ), '', true );
+		wp_localize_script( 'av-soundcloud', '_soundcloudSettings', array(
+			'apiClientId' => SOUNDCLOUD_CLIENT_ID
+		) );
 	}
 
 	function print_templates() {
-	?>
-	<script type="text/html" id="tmpl-av-soundcloud-details">
-		<div class="media-embed">
-			<div class="embed-media-settings">
-				<div class="soundcloud-preview"></div>
+?>
+<script type="text/html" id="tmpl-soundcloud-credentials">
+	<div>
+		<# if ( data.api.clientId ) { #>
+		Client ID: <span>{{{ data.api.clientId }}}</span>
+		<# } else { #>
+		<span>You need a SoundCloud API key,
+		 <a href="http://soundcloud.com/you/apps" target="_blank">go here</a>.
+		</span>
+		<# } #>
+	</div>
+</script>
+<script type="text/html" id="tmpl-soundcloud-query-results">
+	<# _.each( data.tracks, function (track) {
+		var seconds, minutes;
 
-				<label class="setting">
-					<span><?php _e('URL'); ?></span>
-					<input type="text" data-setting="url" value="{{ data.model.url }}" />
-				</label>
-				<label class="setting">
-					<span><?php _e('WIDTH'); ?></span>
-					<input type="text" data-setting="width" value="{{ data.model.width ? data.model.width : '' }}" />
-				</label>
-				<label class="setting">
-					<span><?php _e('HEIGHT'); ?></span>
-					<input type="text" data-setting="height" value="{{ data.model.height ? data.model.height : '' }}" />
-				</label>
-			</div>
-		</div>
-	</script>
-
-	<script type="text/html" id="tmpl-editor-av-soundcloud">
-		<div class="toolbar">
-			<div class="dashicons dashicons-edit edit"></div>
-			<div class="dashicons dashicons-no-alt remove"></div>
-		</div>
-		{{{ data.content }}}
-		<div class="wpview-overlay"></div>
-	</script>
-	<?php
+		seconds = Math.round( ( track.duration / 1000 ) % 60 );
+		minutes = Math.round( ( ( track.duration / 1000 ) - seconds ) / 60 );
+		if ( seconds < 10 ) {
+			seconds = "0" + seconds;
+		}
+	#>
+	<li class="sc-track">
+		<# if ( track.artwork_url ) { #>
+		<img class="sc-artwork" src="{{{ track.artwork_url }}}"/>
+		<# } else { #>
+		<span class="sc-artwork"></span>
+		<# } #>
+		<span class="meta">
+			<a class="sound" data-id="{{ track.id }}" href="{{{ track.permalink_url }}}">{{{ track.title }}}</a>
+			<span><strong>Posted:</strong> {{{ track.created_at.split(' ')[0] }}}</span>
+			<span><strong>Duration:</strong> {{{ minutes }}}:{{{ seconds }}}</span>
+			<# if ( track.favoritings_count ) { #>
+			<span><strong>Favorites:</strong> {{{ track.favoritings_count.toLocaleString() }}}</span>
+			<# } #>
+			<# if ( track.genre ) { #>
+			<span><strong>Genre:</strong> {{{ track.genre }}}</span>
+			<# } #>
+		</span>
+		<span class="user">
+			<# if ( track.user.avatar_url ) { #>
+			<img class="sc-avatar" src="{{{ track.user.avatar_url }}}"/>
+			<# } #>
+			Posted by: <a data-id="{{{ track.user.id }}}" class="soundcloud-user" href="{{ track.user.permalink_url }}">{{{ track.user.username }}}</a>
+		</span>
+	</li>
+	<# } ) #>
+</script>
+<script type="text/html" id="tmpl-default-state-single-mode">
+	<div class="spin-wrapper"></div>
+	<div class="soundcloud-wrapper"></div>
+</script>
+<?php
 	}
 }

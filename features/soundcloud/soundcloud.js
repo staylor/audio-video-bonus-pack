@@ -3,251 +3,355 @@
 (function ($, _, Backbone, wp) {
 	"use strict";
 
-	var media = wp.media, embedCache = {},
+	var loaded = false,
+		settings = _soundcloudSettings,
+		soundcloud = {},
+		media = wp.media;
 
-	SoundCloudDetailsController = media.controller.State.extend({
+	soundcloud.DefaultState = media.controller.State.extend({
 		defaults: {
-			id: 'av-soundcloud-details',
-			title: 'Edit Details',
-			toolbar: 'av-soundcloud-details',
-			content: 'av-soundcloud-details',
-			menu: 'av-soundcloud-details',
+			id: 'default-state',
+			title: 'SoundCloud',
+			toolbar: 'default-state',
+			content: 'default-mode',
+			menu: 'default-state',
 			router: false,
 			priority: 60
+		}
+	});
+
+	soundcloud.SearchField = media.View.extend({
+		tagName:   'input',
+		className: 'search',
+		id: 'soundcloud-search',
+
+		attributes: {
+			type: 'search'
 		},
 
-		initialize: function( options ) {
-			this.soundcloud = options.soundcloud;
-			media.controller.State.prototype.initialize.apply( this, arguments );
-		}
-	}),
-
-	SoundCloudDetailsView = media.view.Settings.extend({
-		className: 'av-soundcloud-details',
-		template:  media.template( 'av-soundcloud-details' ),
 		initialize: function() {
-			this.model.on( 'change', this.render, this );
+			this.lastQuery = this.controller.lastQuery || '';
+
+			if ( settings.apiClientId ) {
+				this.events = _.extend( this.events || {}, {
+					'keyup' : 'query'
+				} );
+			}
+		},
+
+		queryDone: function( tracks ) {
+			this.controller.trigger( 'soundcloud:query:update', tracks );
+		},
+
+		query: _.debounce( function( e ) {
+			this.lastQuery = e.currentTarget.value;
+			this.controller.trigger( 'soundcloud:query:start', this.lastQuery );
+			SC.get('/tracks', { q: this.lastQuery }, _.bind( this.queryDone, this ) );
+		}, 350 ),
+
+		render: function() {
+			media.View.prototype.render.apply( this, arguments );
+
+			if ( this.lastQuery ) {
+				this.$el.val( this.lastQuery );
+			}
+		}
+	});
+
+	soundcloud.QueryResults = media.View.extend({
+		tagName: 'ul',
+		className: 'query-results',
+		template:  media.template( 'soundcloud-query-results' ),
+		initialize: function() {
+			this.tracks = new Backbone.Collection();
+			if ( this.controller.tracks ) {
+				this.tracks.reset( this.controller.tracks );
+			}
+			this.tracks.on( 'reset', this.render, this );
+			this.listenTo( this.controller, 'soundcloud:query:update', this.updateTracks );
+		},
+
+		events : {
+			'click .sound' : 'singleMode',
+			'click .soundcloud-user' : 'userMode'
+		},
+
+		singleMode: function(e) {
+			e.preventDefault();
+			var single = this.tracks.where({
+				id: $( e.currentTarget ).data( 'id' )
+			}).shift();
+			this.controller.trigger( 'soundcloud:query:single', single );
+		},
+
+		userMode: function(e) {
+			e.preventDefault();
+			var endpoint, tracks;
+
+			this.userId = $( e.currentTarget ).data( 'id' );
+
+			tracks = this.controller.users.get( this.userId );
+
+			if ( tracks ) {
+				this.userQueryDone( tracks, true );
+			} else {
+				endpoint = '/users/' + this.userId + '/tracks';
+				this.controller.trigger( 'soundcloud:query:start' );
+
+				SC.get( endpoint, {}, _.bind( this.userQueryDone, this ) );
+			}
+		},
+
+		userQueryDone: function( tracks, silent ) {
+			if ( silent ) {
+				this.controller.trigger( 'soundcloud:query:user' );
+			} else {
+				this.controller.trigger( 'soundcloud:query:user', this.userId, tracks );
+			}
+			this.updateTracks( tracks );
+		},
+
+		updateTracks: function( tracks ) {
+			this.tracks.reset( tracks );
 		},
 
 		prepare: function() {
-			return _.defaults( {
-				model: this.model.toJSON()
-			}, this.options );
-		},
-
-		render: function() {
-			/**
-			 * Call `render` directly on parent class with passed arguments
-			 */
-			media.View.prototype.render.apply( this, arguments );
-
-			this.fetch();
-			return this;
-		},
-
-		fetch: function() {
-			this.parsed = false;
-			wp.ajax.send( 'parse-embed', {
-				data: {
-					post_ID: $( '#post_ID' ).val(),
-					content: '[embed]' + this.model.get('url') + '[/embed]'
-				}
-			} ).done( _.bind( this.setHtml, this ) );
-		},
-
-		setHtml: function ( content ) {
-			this.parsed = content;
-			this.$( '.soundcloud-preview' ).html( content );
+			return {
+				tracks: this.tracks.toJSON()
+			};
 		}
 	}),
 
-	SoundCloudDetailsFrame = media.view.MediaFrame.Select.extend({
-		defaults: {
-			id:      'av-soundcloud',
-			url:     '',
-			type:    'link',
-			title:   'Soundcloud Details',
-			priority: 120
+	soundcloud.DefaultState.View = media.View.extend({
+		className: 'default-state',
+
+		initialize: function() {
+			this.createSpinner();
+			this.createToolbar();
+			this.createContent();
+
+			media.View.prototype.initialize.apply( this, arguments );
 		},
 
-		initialize: function( options ) {
-			this.soundcloud = new Backbone.Model( options.metadata );
-			media.view.MediaFrame.Select.prototype.initialize.apply( this, arguments );
+		createSpinner: function() {
+			var spinner = new media.view.Spinner({
+					priority: -60
+				});
+
+			this.listenTo(
+				this.controller,
+				'soundcloud:query:start',
+				_.bind( spinner.show, spinner )
+			);
+
+			this.listenTo(
+				this.controller,
+				'soundcloud:query:update',
+				_.bind( spinner.hide, spinner )
+			);
+
+			this.listenTo(
+				this.controller,
+				'soundcloud:query:user',
+				_.bind( spinner.hide, spinner )
+			);
+
+			this.spinner = spinner;
+		},
+
+		createToolbar: function() {
+			this.toolbar = new media.view.Toolbar({
+				controller: this.controller
+			});
+			this.views.add( this.toolbar );
+
+			this.toolbar.set( 'searchLabel', new media.view.Label({
+				value: 'Search for Sounds: ',
+				className: '',
+				attributes: {
+					'for': 'soundcloud-search'
+				},
+				controller: this.controller,
+				priority: -75
+			}) );
+
+			this.toolbar.set( 'searchField', new soundcloud.SearchField({
+				controller: this.controller,
+				priority: -75
+			}) );
+
+			this.toolbar.set( 'spinner', this.spinner );
+		},
+
+		createContent: function() {
+			this.views.add( new soundcloud.QueryResults({
+				controller: this.controller
+			}).render() );
+		}
+	});
+
+	soundcloud.DefaultState.SingleMode = media.View.extend({
+		className: 'default-state',
+		template: media.template( 'default-state-single-mode' ),
+
+		initialize: function() {
+			this.item = this.controller.currentItem;
+		},
+
+		render: function() {
+			media.View.prototype.render.apply( this, arguments );
+
+			this.spinner = $('<span class="spinner" />');
+			this.$( '.spin-wrapper' ).append( this.spinner[0] );
+			this.spinner.show();
+
+			wp.ajax.send( 'parse-embed', {
+				data : {
+					post_ID: media.view.settings.post.id,
+					shortcode: '[embed]' + this.item.get( 'permalink_url' ) + '[/embed]'
+				}
+			} ).done( _.bind( this.renderResponse, this ) );
+		},
+
+		renderResponse: function( html ) {
+			this.$( '.soundcloud-wrapper' ).html( html );
+			this.spinner.hide();
+		}
+	});
+
+	soundcloud.ApiCredentials = media.View.extend({
+		className: 'soundcloud-credentials',
+		template: media.template( 'soundcloud-credentials' ),
+
+		prepare: function() {
+			return {
+				api: {
+					clientId: settings.apiClientId
+				}
+			};
+		}
+	});
+
+	soundcloud.Frame = media.view.MediaFrame.Select.extend({
+		defaults: {
+			id: 'av-soundcloud'
 		},
 
 		bindHandlers: function() {
 			media.view.MediaFrame.Select.prototype.bindHandlers.apply( this, arguments );
 
-			this.on( 'menu:create:av-soundcloud-details', this.createMenu, this );
-			this.on( 'content:render:av-soundcloud-details', this.contentDetailsRender, this );
-			this.on( 'menu:render:av-soundcloud-details', this.menuRender, this );
-			this.on( 'toolbar:render:av-soundcloud-details', this.toolbarRender, this );
+			this.users = new Backbone.Model();
+
+			this.on( 'menu:create:default-state', this.createMenu, this );
+			this.on( 'menu:render:default-state', this.menuRender, this );
+
+			this.on( 'content:create:default-mode', this.defaultMode, this );
+			this.on( 'content:create:single-mode', this.singleMode, this );
+
+			this.on( 'soundcloud:query:start',  this.setQuery, this );
+			this.on( 'soundcloud:query:update', this.setTracks, this );
+			this.on( 'soundcloud:query:single', this.setSingle, this );
+			this.on( 'soundcloud:query:user',   this.setUser, this );
 		},
 
-		contentDetailsRender: function() {
-			var view = new SoundCloudDetailsView({
-				controller: this,
-				model: this.state().soundcloud
-			}).render();
-
-			this.content.set( view );
+		setQuery: function( query ) {
+			if ( ! query ) {
+				return;
+			}
+			this.lastQuery = query;
 		},
 
-		menuRender: function( view ) {
-			var lastState = this.lastState(),
-				previous = lastState && lastState.id,
-				frame = this;
+		setTracks: function( tracks ) {
+			this.tracks = tracks;
+		},
 
-			view.set({
-				cancel: {
-					text: 'Cancel Editing',
-					priority: 20,
-					click: function() {
-						if ( previous ) {
-							frame.setState( previous );
-						} else {
-							frame.close();
-						}
-					}
-				},
-				separateCancel: new media.View({
-					className: 'separator',
-					priority: 40
-				})
+		setSingle: function( model ) {
+			this.currentItem = model;
+			this.content.mode( 'single-mode' );
+		},
+
+		setUser: function( userId, tracks ) {
+			if ( ! userId ) {
+				return;
+			}
+			this.lastQuery = '';
+			this.lastUser = userId;
+			this.users.set( userId, tracks );
+			this.setTracks( tracks );
+		},
+
+		defaultMode: function( contentRegion ) {
+			contentRegion.view = new soundcloud.DefaultState.View({
+				controller: this
 			});
 		},
 
-		toolbarRender: function() {
-			this.toolbar.set( new media.view.Toolbar({
-				controller: this,
-				items: {
-					button: {
-						style:    'primary',
-						text:     'Update SoundCloud Embed',
-						priority: 80,
-						click:    function() {
-							var controller = this.controller;
-							controller.close();
-							controller.state().trigger( 'update', controller.soundcloud.toJSON() );
-							controller.setState( controller.options.state );
-							controller.reset();
-						}
+		singleMode: function( contentRegion ) {
+			contentRegion.view = new soundcloud.DefaultState.SingleMode({
+				controller: this
+			});
+
+			this.menu.render();
+		},
+
+		menuRender: function( view ) {
+			var self = this, views = {};
+
+			if ( 'single-mode' === this.content.mode() ) {
+				views.goBack = {
+					text:     'Go Back',
+					priority: 20,
+					click:    function() {
+						self.content.mode( 'default-mode' );
+						self.menu.render();
 					}
-				}
-			}) );
+				};
+			}
+			
+			views.separateCancel = new media.View({
+				className: 'separator',
+				priority: 40
+			});
+			views.apiCredentials = new soundcloud.ApiCredentials({
+				priority: 80
+			});
+
+			view.set( views );
 		},
 
 		createStates: function() {
 			this.states.add([
-				new SoundCloudDetailsController( {
-					soundcloud: this.soundcloud
-				} )
+				new soundcloud.DefaultState()
 			]);
 		}
-	}),
+	});
 
-	soundcloud = {
-		coerce : media.coerce,
+	function init() {
+		var $body = $( 'body' );
 
-		defaults : {
-			url : '',
-			width: 0,
-			height: 0
-		},
+		$( '.add-soundcloud' ).on( 'click', function(e) {
+			e.preventDefault();
 
-		edit : function ( data ) {
-			var frame, shortcode = wp.shortcode.next( 'soundcloud', data ).shortcode,
-				attrs = _.defaults( shortcode.attrs.named, soundcloud.defaults );
+			$body.addClass( 'soundcloud-active' );
 
-			frame = new SoundCloudDetailsFrame({
+			media.frame = new soundcloud.Frame({
 				frame: 'av-soundcloud',
-				state: 'av-soundcloud-details',
-				metadata: attrs
+				state: 'default-state'
 			});
+			media.frame.on( 'close', function() {
+				$body.removeClass( 'soundcloud-active' );
+			} );
 
-			return frame;
-		},
+			media.frame.open();
 
-		shortcode : function( model ) {
-			var self = this, content;
-
-			_.each( this.defaults, function( value, key ) {
-				model[ key ] = self.coerce( model, key );
-
-				if ( value === model[ key ] ) {
-					delete model[ key ];
-				}
-			});
-
-			content = model.content;
-			delete model.content;
-			delete model.key;
-
-			return new wp.shortcode({
-				tag: 'soundcloud',
-				attrs: model,
-				content: content
-			});
-		}
-	};
-
-	wp.mce.views.register( 'soundcloud', {
-		View: {
-			template:  media.template( 'editor-av-soundcloud' ),
-			initialize: function( options ) {
-				this.shortcode = options.shortcode;
-				this.attrs = _.defaults(
-					this.shortcode.attrs.named,
-					soundcloud.defaults
-				);
-				this.parsed = false;
-				_.bindAll( this, 'setNode', 'fetch' );
-				$(this).bind('ready', this.setNode);
-			},
-
-			setNode: function (e, node) {
-				this.node = node;
-				if ( ! this.parsed ) {
-					this.fetch();
-				}
-			},
-
-			fetch: function () {
-				wp.ajax.send( 'parse-embed', {
-					data: {
-						post_ID: $( '#post_ID' ).val(),
-						content: '[embed]' + this.shortcode.attrs.named.url + '[/embed]'
-					}
-				} ).done( _.bind( this.setHtml, this ) );
-			},
-
-			setHtml: function ( content ) {
-				this.parsed = content;
-				$( this.node ).html( this.getHtml() );
-			},
-
-			getHtml: function() {
-				if ( ! this.parsed ) {
-					return '';
-				}
-				return this.template({ content: this.parsed });
+			if ( ! loaded ) {
+				SC.initialize({
+					client_id: settings.apiClientId
+				});
+				loaded = true;
 			}
-		},
+		} );
+	}
 
-		edit: function( node ) {
-			var self = this, frame, data;
-
-			data = window.decodeURIComponent( $( node ).attr('data-wpview-text') );
-			frame = soundcloud.edit( data );
-			frame.state('av-soundcloud-details').on( 'update', function( selection ) {
-				var shortcode = soundcloud.shortcode( selection ).string();
-				$( node ).attr( 'data-wpview-text', window.encodeURIComponent( shortcode ) );
-				wp.mce.views.refreshView( self, shortcode );
-				frame.detach();
-			});
-			frame.open();
-		}
-	} );
-
-	media.embedCache = embedCache;
+	$( init );
 }(jQuery, _, Backbone, wp));

@@ -1,2 +1,105 @@
-.av-soundcloud-embed {padding: 20px 0;}
-.av-soundcloud-details .embed-media-settings {top: 0;}
+.soundcloud-active .separator + .media-menu-item {
+	display: none;
+}
+
+.default-state {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
+.default-state .media-toolbar {
+	background: #fff;
+	top: 20px;
+}
+
+.query-results, .soundcloud-wrapper {
+	position: absolute;
+	top: 72px;
+	left: 20px;
+	right: 20px;
+	bottom: 0;
+	overflow: auto;
+	display: block;
+}
+
+.spin-wrapper {
+	position: absolute;
+	display: block;
+	width: 20px;
+	height: 20px;
+	top: 30px;
+	left: 20px;
+}
+
+.soundcloud-wrapper {
+	top: 40px;
+}
+
+.sc-track {
+	width: 100%;
+	overflow: hidden;
+	padding: 10px 0;
+	border-bottom: 1px solid #eee;
+	display: block;
+}
+
+.sc-track:last-child {
+	border-bottom: 0;
+}
+
+.sc-track .sc-artwork {
+	background: #eee;
+	width: 100px;
+	height: 100px;
+	display: block;
+	float: left;
+	margin: 0 10px 0 0;
+}
+
+.sc-track .meta, .sc-track .user {
+	display: block;
+	float: left;
+}
+
+.sc-track .meta {
+	width: 300px;
+	margin: 5px 10px 0 0;
+}
+
+.sc-track .user {
+	width: 250px;
+	margin-top: 35px;
+}
+
+.sc-track .user a {
+	line-height: 30px;
+}
+
+.sc-track .meta span {
+	display: block;
+}
+
+.sc-avatar {
+	width: 30px;
+	height: 30px;
+	margin-right: 10px;
+	float: left;
+}
+
+.soundcloud-credentials div {
+	display: block;
+	position: relative;
+	padding: 8px 20px;
+	margin: 0;
+	line-height: 18px;
+	font-size: 12px;
+	color: #0074a2;
+}
+
+.soundcloud-credentials span {
+	color: #444;
+	word-wrap: break-word;
+	font-size: 12px;
+}
