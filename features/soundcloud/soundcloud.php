@@ -6,7 +6,7 @@
  * @subpackage Soundcloud
  */
 
-define( 'SOUNDCLOUD_CLIENT_ID', '' );
+define( 'SOUNDCLOUD_CLIENT_ID', '248c57e7f54fb15812a11f34afd88c92' );
 
 class AVSoundCloud extends AVSingleton {
 	protected function __construct() {
@@ -15,6 +15,103 @@ class AVSoundCloud extends AVSingleton {
 		add_action( 'media_buttons', array( $this, 'media_buttons' ) );
 		add_action( 'load-post.php', array( $this, 'enqueue' ) );
 		add_action( 'load-post-new.php', array( $this, 'enqueue' ) );
+
+		add_action( 'wp_ajax_soundcloud-save-asset', array( $this, 'soundcloud_save_asset' ) );
+	}
+
+	function resolve_asset( $track_id ) {
+		$service = "https://api.soundcloud.com/tracks/{$track_id}.json";
+		$endpoint = add_query_arg( array(
+			'consumer_key' => SOUNDCLOUD_CLIENT_ID
+		), $service );
+
+		$response = wp_remote_get( $endpoint );
+		if ( empty( $response['body'] ) ) {
+			return;
+		}
+
+		$data = json_decode( $response['body'], true );
+		if ( empty( $data['stream_url'] ) ) {
+			return;
+		}
+
+		$stream_url = add_query_arg( array(
+			'consumer_key' => SOUNDCLOUD_CLIENT_ID
+		), $data['stream_url'] );
+
+		$stream_response = wp_remote_get( $stream_url, array( 'redirection' => 0 ) );
+
+		if ( ! empty( $stream_response['headers']['location'] ) ) {
+			return array(
+				'title' => $data['title'],
+				'audio' => $stream_response['headers']['location'],
+				'image' => empty( $data['artwork_url'] ) ? '' : $data['artwork_url']
+			);
+		}
+	}
+
+	function sideload_assets( $data, $post_id ) {
+		$file_array = array();
+		$file_array['name'] = sanitize_title( $data['title'] );
+		$file_array['tmp_name'] = download_url( $data['audio'] );
+
+		if ( is_wp_error( $file_array['tmp_name'] ) ) {
+			return;
+		}
+
+		$overrides = array(
+			'test_form' => false,
+			'test_type' => false
+		);
+
+		$time = current_time( 'mysql' );
+		if ( $post = get_post( $post_id ) ) {
+			if ( substr( $post->post_date, 0, 4 ) > 0 ) {
+				$time = $post->post_date;
+			}
+		}
+
+		$sideload = wp_handle_sideload( $file_array, $overrides, $time );
+
+		var_dump( $sideload );
+		if ( empty( $sideload['url'] ) ) {
+			return;
+		}
+
+		$url = $sideload['url'];
+		$type = $sideload['type'];
+		$file = $sideload['file'];
+		$title = preg_replace( '/\.[^.]+$/', '', basename( $file ) );
+		$content = '';
+
+		$post_data = array();
+
+		// Construct the attachment array.
+		$attachment = array_merge( array(
+			'post_mime_type' => $type,
+			'guid' => $url,
+			'post_parent' => $post_id,
+			'post_title' => $title,
+			'post_content' => $content,
+		), $post_data );
+
+
+		// Save the attachment metadata
+		$id = wp_insert_attachment( $attachment, $file, $post_id );
+		if ( ! is_wp_error( $id ) ) {
+			wp_update_attachment_metadata( $id, wp_generate_attachment_metadata( $id, $file ) );
+		}
+	}
+
+	function soundcloud_save_asset() {
+		$response = $this->resolve_asset( 'https://api.soundcloud.com/tracks/' + $_REQUEST['track'] + '/stream' );
+		if ( empty( $response ) ) {
+			wp_send_json_error();
+		}
+
+		$this->sideload_assets( $response, $_REQUEST['post_ID'] );
+
+		wp_send_json_success();
 	}
 
 	function media_buttons() {
@@ -63,28 +160,28 @@ class AVSoundCloud extends AVSingleton {
 			seconds = "0" + seconds;
 		}
 	#>
-	<li class="sc-track">
+	<li class="sc-track" data-id="{{ track.id }}">
 		<# if ( track.artwork_url ) { #>
 		<img class="sc-artwork" src="{{{ track.artwork_url }}}"/>
 		<# } else { #>
 		<span class="sc-artwork"></span>
 		<# } #>
 		<span class="meta">
-			<a class="sound" data-id="{{ track.id }}" href="{{{ track.permalink_url }}}">{{{ track.title }}}</a>
-			<span><strong>Posted:</strong> {{{ track.created_at.split(' ')[0] }}}</span>
-			<span><strong>Duration:</strong> {{{ minutes }}}:{{{ seconds }}}</span>
+			<a class="sound" data-id="{{ track.id }}" href="{{ track.permalink_url }}">{{{ track.title }}}</a>
+			<span><strong>Posted:</strong> {{ track.created_at.split(' ')[0] }}</span>
+			<span><strong>Duration:</strong> {{ minutes }}:{{ seconds }}</span>
 			<# if ( track.favoritings_count ) { #>
-			<span><strong>Favorites:</strong> {{{ track.favoritings_count.toLocaleString() }}}</span>
+			<span><strong>Favorites:</strong> {{ track.favoritings_count.toLocaleString() }}</span>
 			<# } #>
 			<# if ( track.genre ) { #>
-			<span><strong>Genre:</strong> {{{ track.genre }}}</span>
+			<span><strong>Genre:</strong> {{ track.genre }}</span>
 			<# } #>
 		</span>
 		<span class="user">
 			<# if ( track.user.avatar_url ) { #>
-			<img class="sc-avatar" src="{{{ track.user.avatar_url }}}"/>
+			<img class="sc-avatar" src="{{ track.user.avatar_url }}"/>
 			<# } #>
-			Posted by: <a data-id="{{{ track.user.id }}}" class="soundcloud-user" href="{{ track.user.permalink_url }}">{{{ track.user.username }}}</a>
+			Posted by: <a data-id="{{ track.user.id }}" class="soundcloud-user" href="{{ track.user.permalink_url }}">{{ track.user.username }}</a>
 		</span>
 	</li>
 	<# } ) #>
@@ -92,6 +189,15 @@ class AVSoundCloud extends AVSingleton {
 <script type="text/html" id="tmpl-default-state-single-mode">
 	<div class="spin-wrapper"></div>
 	<div class="soundcloud-wrapper"></div>
+	<a data-id="{{ data.id }}" class="button sc-add-to-library hidden" href="#">Add to Media Library</a>
+</script>
+<script type="text/html" id="tmpl-soundcloud-recent-searches">
+<# if ( data.terms.length ) { #>
+<span>Recent Searches:</span>
+	<# _.each( data.terms, function( term ) { #>
+	<a class="query" href="#" data-query="{{ term }}">{{ term }}</a>
+	<# } ) #>
+<# } #>
 </script>
 <?php
 	}

@@ -3,9 +3,12 @@
 (function ($, _, Backbone, wp) {
 	"use strict";
 
-	var loaded = false,
-		settings = _soundcloudSettings,
-		soundcloud = {},
+	var settings = _soundcloudSettings,
+		soundcloud = {
+			loaded : false,
+			queryLoaded : false,
+			querySetting : 'sc_queries'
+		},
 		media = wp.media;
 
 	soundcloud.DefaultState = media.controller.State.extend({
@@ -30,31 +33,77 @@
 		},
 
 		initialize: function() {
-			this.lastQuery = this.controller.lastQuery || '';
+			this.lastQuery = '';
+			if ( ! soundcloud.queryLoaded ) {
+				this.lastQuery = this.controller.getLastQuery();
+			}
 
 			if ( settings.apiClientId ) {
 				this.events = _.extend( this.events || {}, {
 					'keyup' : 'query'
 				} );
 			}
+			this.listenTo( this.controller, 'soundcloud:query:proxy', this.proxy );
+			this.listenTo( this.controller, 'soundcloud:query:user',  this.unset );
+		},
+
+		proxy: function( e ) {
+			this.query( e, true );
+		},
+
+		unset: function() {
+			this.lastQuery = '';
+			this.$el.val( this.lastQuery );
 		},
 
 		queryDone: function( tracks ) {
 			this.controller.trigger( 'soundcloud:query:update', tracks );
 		},
 
-		query: _.debounce( function( e ) {
-			this.lastQuery = e.currentTarget.value;
+		query: _.debounce( function( e, proxy ) {
+			var value = e.currentTarget.value || $( e.currentTarget ).data( 'query' );
+			if ( ! value ) {
+				return;
+			}
+			this.lastQuery = value;
+			if ( proxy ) {
+				this.$el.val( this.lastQuery );
+			}
 			this.controller.trigger( 'soundcloud:query:start', this.lastQuery );
-			SC.get('/tracks', { q: this.lastQuery }, _.bind( this.queryDone, this ) );
+			SC.get( '/tracks', { q: this.lastQuery }, _.bind( this.queryDone, this ) );
 		}, 350 ),
 
 		render: function() {
 			media.View.prototype.render.apply( this, arguments );
 
-			if ( this.lastQuery ) {
+			if ( ! soundcloud.queryLoaded && this.lastQuery ) {
+				soundcloud.queryLoaded = true;
 				this.$el.val( this.lastQuery );
+				this.query( { currentTarget: this.$el[0] } );
 			}
+		}
+	});
+
+	soundcloud.RecentSearches = media.View.extend({
+		className:  'recent-searches',
+		template:   media.template( 'soundcloud-recent-searches' ),
+		initialize: function() {
+			this.terms = this.controller.getSavedQueries();
+		},
+
+		events: {
+			'click .query' : 'proxySearch'
+		},
+
+		proxySearch: function( e ) {
+			e.preventDefault();
+			this.controller.trigger( 'soundcloud:query:proxy', e );
+		},
+
+		prepare: function() {
+			return {
+				terms: this.terms
+			};
 		}
 	});
 
@@ -73,38 +122,41 @@
 
 		events : {
 			'click .sound' : 'singleMode',
-			'click .soundcloud-user' : 'userMode'
+			'click .soundcloud-user' : 'userMode',
+			'click li' : 'singleMode'
 		},
 
-		singleMode: function(e) {
+		singleMode: function( e ) {
 			e.preventDefault();
+			e.stopPropagation();
+
 			var single = this.tracks.where({
 				id: $( e.currentTarget ).data( 'id' )
 			}).shift();
 			this.controller.trigger( 'soundcloud:query:single', single );
 		},
 
-		userMode: function(e) {
-			e.preventDefault();
+		userMode: function( e ) {
 			var endpoint, tracks;
+			e.preventDefault();
+			e.stopPropagation();
 
 			this.userId = $( e.currentTarget ).data( 'id' );
-
 			tracks = this.controller.users.get( this.userId );
+
+			this.controller.trigger( 'soundcloud:query:start' );
 
 			if ( tracks ) {
 				this.userQueryDone( tracks, true );
 			} else {
 				endpoint = '/users/' + this.userId + '/tracks';
-				this.controller.trigger( 'soundcloud:query:start' );
-
 				SC.get( endpoint, {}, _.bind( this.userQueryDone, this ) );
 			}
 		},
 
 		userQueryDone: function( tracks, silent ) {
 			if ( silent ) {
-				this.controller.trigger( 'soundcloud:query:user' );
+				this.controller.trigger( 'soundcloud:query:user', this.userId );
 			} else {
 				this.controller.trigger( 'soundcloud:query:user', this.userId, tracks );
 			}
@@ -121,6 +173,58 @@
 			};
 		}
 	}),
+
+	soundcloud.SingleMode = media.View.extend({
+		className: 'default-state-single',
+		template: media.template( 'default-state-single-mode' ),
+
+		initialize: function() {
+			this.item = this.controller.currentItem;
+		},
+
+		prepare: function() {
+			return this.item.toJSON();
+		},
+
+		events: {
+			'click .sc-add-to-library': 'addToLibrary'
+		},
+
+		addToLibrary: function(e) {
+			e.preventDefault();
+			wp.ajax.send( 'soundcloud-save-asset', {
+				data : {
+					post_ID: media.view.settings.post.id,
+					track: this.item.get( 'id' )
+				}
+			} ).done( _.bind( this.handleResponse, this ) );
+		},
+
+		handleResponse: function() {
+			console.log( arguments );
+		},
+
+		render: function() {
+			media.View.prototype.render.apply( this, arguments );
+
+			this.spinner = $( '<span class="spinner" />' );
+			this.$( '.spin-wrapper' ).append( this.spinner[0] );
+			this.spinner.show();
+
+			wp.ajax.send( 'parse-embed', {
+				data : {
+					post_ID: media.view.settings.post.id,
+					shortcode: '[embed]' + this.item.get( 'permalink_url' ) + '[/embed]'
+				}
+			} ).done( _.bind( this.renderResponse, this ) );
+		},
+
+		renderResponse: function( html ) {
+			this.$( '.soundcloud-wrapper' ).html( html );
+			this.$( '.sc-add-to-library' ).removeClass( 'hidden' );
+			this.spinner.hide();
+		}
+	});
 
 	soundcloud.DefaultState.View = media.View.extend({
 		className: 'default-state',
@@ -181,41 +285,24 @@
 			}) );
 
 			this.toolbar.set( 'spinner', this.spinner );
+
+			this.toolbar.set( 'recentSearches', new soundcloud.RecentSearches({
+				controller: this.controller,
+				priority: -50
+			}) );
 		},
 
 		createContent: function() {
-			this.views.add( new soundcloud.QueryResults({
-				controller: this.controller
-			}).render() );
-		}
-	});
-
-	soundcloud.DefaultState.SingleMode = media.View.extend({
-		className: 'default-state',
-		template: media.template( 'default-state-single-mode' ),
-
-		initialize: function() {
-			this.item = this.controller.currentItem;
-		},
-
-		render: function() {
-			media.View.prototype.render.apply( this, arguments );
-
-			this.spinner = $('<span class="spinner" />');
-			this.$( '.spin-wrapper' ).append( this.spinner[0] );
-			this.spinner.show();
-
-			wp.ajax.send( 'parse-embed', {
-				data : {
-					post_ID: media.view.settings.post.id,
-					shortcode: '[embed]' + this.item.get( 'permalink_url' ) + '[/embed]'
-				}
-			} ).done( _.bind( this.renderResponse, this ) );
-		},
-
-		renderResponse: function( html ) {
-			this.$( '.soundcloud-wrapper' ).html( html );
-			this.spinner.hide();
+			if ( 'single-mode' === this.controller.content.mode() ) {
+				this.content = new soundcloud.SingleMode({
+					controller: this.controller
+				});
+			} else {
+				this.content = new soundcloud.QueryResults({
+					controller: this.controller
+				});
+			}
+			this.views.add( this.content );
 		}
 	});
 
@@ -242,40 +329,114 @@
 
 			this.users = new Backbone.Model();
 
-			this.on( 'menu:create:default-state', this.createMenu, this );
-			this.on( 'menu:render:default-state', this.menuRender, this );
+//			this.on( 'all', function() {
+//				console.log( arguments );
+//			} );
+
+			this.on( 'title:create:single-mode',    this.createTitle, this );
+			this.on( 'title:render:default',        this.renderTitle, this );
+			this.on( 'title:render:single-mode',    this.renderSingleTitle, this );
+
+			this.on( 'menu:create',   this.createMenu, this );
+			this.on( 'menu:render',   this.menuRender, this );
 
 			this.on( 'content:create:default-mode', this.defaultMode, this );
-			this.on( 'content:create:single-mode', this.singleMode, this );
+			this.on( 'content:create:single-mode',  this.defaultMode, this );
 
-			this.on( 'soundcloud:query:start',  this.setQuery, this );
-			this.on( 'soundcloud:query:update', this.setTracks, this );
-			this.on( 'soundcloud:query:single', this.setSingle, this );
-			this.on( 'soundcloud:query:user',   this.setUser, this );
+			this.on( 'soundcloud:query:start',      this.setQuery, this );
+			this.on( 'soundcloud:query:start',      this.setContent, this );
+			this.on( 'soundcloud:query:update',     this.setTracks, this );
+			this.on( 'soundcloud:query:single',     this.setSingle, this );
+			this.on( 'soundcloud:query:user',       this.setUser, this );
+			this.on( 'soundcloud:query:proxy',      this.setContent, this );
+		},
+
+		unencodeQuery: function( query ) {
+			return query.replace( '0_0', ' ' );
+		},
+
+		encodeQuery: function( query ) {
+			return query.replace( ' ', '0_0' );
+		},
+
+		getSavedQueries: function() {
+			var setting = getUserSetting( soundcloud.querySetting );
+			if ( ! setting ) {
+				return [];
+			}
+			return this.unencodeQuery( setting ).split( '__' );
+		},
+
+		getLastQuery: function() {
+			var saved;
+			if ( ! soundcloud.queryLoaded ) {
+				saved = this.getSavedQueries();
+				if ( saved.length ) {
+					this.lastQuery = _.first( saved );
+				}
+			}
+			return this.lastQuery;
 		},
 
 		setQuery: function( query ) {
+			var queries, saved, similar, self = this;
 			if ( ! query ) {
 				return;
 			}
+
 			this.lastQuery = query;
+			saved = this.getSavedQueries();
+			if ( ! saved.length ) {
+				queries = [ this.lastQuery ];
+			} else {
+				queries = _.first( saved, 3 );
+				if ( -1 === $.inArray( this.lastQuery, queries ) ) {
+					similar = _.filter( queries, function( query ) {
+						return self.lastQuery.indexOf( query ) > -1;
+					} );
+					queries = _.difference( queries, similar );
+					queries.unshift( this.lastQuery );
+				}
+			}
+			setUserSetting( soundcloud.querySetting, this.encodeQuery( queries.join( '__' ) ) );
 		},
 
 		setTracks: function( tracks ) {
 			this.tracks = tracks;
 		},
 
+		renderTitle: function( view ) {
+			view.$el.html( 'SoundCloud' );
+		},
+
+		renderSingleTitle: function( view ) {
+			var title = this.currentItem.get( 'title' );
+			view.$el.html( 'Viewing: ' + title );
+		},
+
 		setSingle: function( model ) {
 			this.currentItem = model;
+			this.title.mode( 'single-mode' );
 			this.content.mode( 'single-mode' );
+			this.menu.mode( 'single-mode' );
+		},
+
+		setContent: function() {
+			if ( 'single-mode' === this.content.mode() ) {
+				this.content.mode( 'default-mode' );
+				this.title.mode( 'default' );
+				this.menu.mode( 'default' );
+			}
 		},
 
 		setUser: function( userId, tracks ) {
-			if ( ! userId ) {
-				return;
-			}
 			this.lastQuery = '';
 			this.lastUser = userId;
+
+			if ( ! tracks ) {
+				return;
+			}
+
 			this.users.set( userId, tracks );
 			this.setTracks( tracks );
 		},
@@ -284,14 +445,6 @@
 			contentRegion.view = new soundcloud.DefaultState.View({
 				controller: this
 			});
-		},
-
-		singleMode: function( contentRegion ) {
-			contentRegion.view = new soundcloud.DefaultState.SingleMode({
-				controller: this
-			});
-
-			this.menu.render();
 		},
 
 		menuRender: function( view ) {
@@ -307,7 +460,7 @@
 					}
 				};
 			}
-			
+
 			views.separateCancel = new media.View({
 				className: 'separator',
 				priority: 40
@@ -327,7 +480,7 @@
 	});
 
 	function init() {
-		var $body = $( 'body' );
+		var $body = $( document.body );
 
 		$( '.add-soundcloud' ).on( 'click', function(e) {
 			e.preventDefault();
@@ -344,13 +497,15 @@
 
 			media.frame.open();
 
-			if ( ! loaded ) {
+			if ( ! soundcloud.loaded ) {
 				SC.initialize({
 					client_id: settings.apiClientId
 				});
-				loaded = true;
+				soundcloud.loaded = true;
 			}
 		} );
+
+		$( '.add-soundcloud' ).click();
 	}
 
 	$( init );
