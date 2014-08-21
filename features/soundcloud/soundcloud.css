@@ -1,6 +1,6 @@
-.soundcloud-active .separator + .media-menu-item {
+/*.soundcloud-active .separator + .media-menu-item {
 	display: none;
-}
+}*/
 
 .default-state {
 	position: relative;
@@ -120,4 +120,14 @@
 .recent-searches {
 	display: inline;
 	padding-right: 10px;
+}
+
+.wp-core-ui .soundcloud-api-submit {
+	display: block;
+	margin: 20px 0;
+}
+
+.wp-core-ui .soundcloud-api-submit .button {
+	display: block;
+	margin-top: 10px;
 }
