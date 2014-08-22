@@ -1,6 +1,9 @@
-/*.soundcloud-active .separator + .media-menu-item {
+.soundcloud-active .separator + .media-menu-item {
 	display: none;
-}*/
+}
+.clear {
+	clear: both;
+}
 
 .default-state {
 	position: relative;
@@ -16,7 +19,7 @@
 
 .query-results, .default-state-single {
 	position: absolute;
-	top: 72px;
+	top: 80px;
 	left: 20px;
 	right: 20px;
 	bottom: 0;
@@ -24,13 +27,15 @@
 	display: block;
 }
 
-.spin-wrapper {
-	position: absolute;
+.wp-core-ui .default-state-single .spinner {
 	display: block;
-	width: 20px;
-	height: 20px;
-	top: 30px;
-	left: 20px;
+	float: left;
+	margin: 5px 10px;
+}
+
+.wp-core-ui .default-state-single a.sc-add-to-library {
+	float: left;
+	margin-right: 10px;
 }
 
 .soundcloud-wrapper {

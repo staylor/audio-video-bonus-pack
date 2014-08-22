@@ -44,8 +44,8 @@ class AVSoundCloud extends AVSingleton {
 
 		list( $clean_url ) = explode( '?', $file['url'], 2 );
 		$wp_filetype = wp_check_filetype( $clean_url );
-		$ext = empty( $wp_filetype['ext'] ) ? '' : $wp_filetype['ext'];
-		$type = empty( $wp_filetype['type'] ) ? '' : $wp_filetype['type'];
+		$ext = $wp_filetype['ext'];
+		$type = $wp_filetype['type'];
 
 		if ( ( ! $type || ! $ext ) && ! current_user_can( 'unfiltered_upload' ) ) {
 			wp_send_json_error( 'Sorry, this file type is not permitted for security reasons.' );
@@ -301,9 +301,10 @@ class AVSoundCloud extends AVSingleton {
 </script>
 
 <script type="text/html" id="tmpl-default-state-single-mode">
-	<div class="spin-wrapper"></div>
 	<div class="soundcloud-wrapper"></div>
 	<a data-id="{{ data.id }}" class="button sc-add-to-library hidden" href="#">Add to Media Library</a>
+	<span class="spinner"></span>
+	<div class="clear"></div>
 	<p class="errors"></p>
 </script>
 
