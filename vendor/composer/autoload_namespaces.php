@@ -10,7 +10,7 @@ return array(
     'Symfony\\Component\\Filesystem\\' => array($vendorDir . '/symfony/filesystem'),
     'Psr\\Log\\' => array($vendorDir . '/psr/log'),
     'Neutron' => array($vendorDir . '/neutron/temporary-filesystem/src'),
-    'FFMpeg' => array($vendorDir . '/php-ffmpeg/php-ffmpeg/src', $vendorDir . '/php-ffmpeg/extras/src'),
+    'FFMpeg' => array($vendorDir . '/php-ffmpeg/extras/src', $vendorDir . '/php-ffmpeg/php-ffmpeg/src'),
     'Evenement' => array($vendorDir . '/evenement/evenement/src'),
     'Doctrine\\Common\\Cache\\' => array($vendorDir . '/doctrine/cache/lib'),
     'Alchemy' => array($vendorDir . '/alchemy/binary-driver/src'),

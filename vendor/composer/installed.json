@@ -259,77 +259,6 @@
         ]
     },
     {
-        "name": "php-ffmpeg/php-ffmpeg",
-        "version": "0.4.4",
-        "version_normalized": "0.4.4.0",
-        "source": {
-            "type": "git",
-            "url": "https://github.com/PHP-FFMpeg/PHP-FFMpeg.git",
-            "reference": "8dfaf1815802614352bbd10eac7299a100bf9757"
-        },
-        "dist": {
-            "type": "zip",
-            "url": "https://api.github.com/repos/PHP-FFMpeg/PHP-FFMpeg/zipball/8dfaf1815802614352bbd10eac7299a100bf9757",
-            "reference": "8dfaf1815802614352bbd10eac7299a100bf9757",
-            "shasum": ""
-        },
-        "require": {
-            "alchemy/binary-driver": "~1.5",
-            "doctrine/cache": "~1.0",
-            "evenement/evenement": "~1.0",
-            "neutron/temporary-filesystem": "~2.1, >=2.1.1",
-            "php": ">=5.3.3"
-        },
-        "require-dev": {
-            "phpunit/phpunit": "~3.7",
-            "sami/sami": "~1.0",
-            "silex/silex": "~1.0"
-        },
-        "suggest": {
-            "php-ffmpeg/extras": "A compilation of common audio & video drivers for PHP-FFMpeg"
-        },
-        "time": "2013-12-17 16:54:46",
-        "type": "library",
-        "extra": {
-            "branch-alias": {
-                "dev-master": "0.4-dev"
-            }
-        },
-        "installation-source": "dist",
-        "autoload": {
-            "psr-0": {
-                "FFMpeg": "src"
-            }
-        },
-        "notification-url": "https://packagist.org/downloads/",
-        "license": [
-            "MIT"
-        ],
-        "authors": [
-            {
-                "name": "Romain Neutron",
-                "email": "imprec@gmail.com",
-                "homepage": "http://www.lickmychip.com/"
-            },
-            {
-                "name": "Phraseanet Team",
-                "email": "info@alchemy.fr",
-                "homepage": "http://www.phraseanet.com/"
-            }
-        ],
-        "description": "FFMpeg PHP, an Object Oriented library to communicate with AVconv / ffmpeg",
-        "keywords": [
-            "audio",
-            "audio processing",
-            "avconv",
-            "avprobe",
-            "ffmpeg",
-            "ffprobe",
-            "video",
-            "video processing"
-        ]
-    },
-    {
         "name": "php-ffmpeg/extras",
         "version": "0.3.1",
         "version_normalized": "0.3.1.0",
@@ -381,57 +310,6 @@
             "codecs",
             "ffmpeg"
         ]
-    },
-    {
-        "name": "symfony/filesystem",
-        "version": "v2.5.0",
-        "version_normalized": "2.5.0.0",
-        "target-dir": "Symfony/Component/Filesystem",
-        "source": {
-            "type": "git",
-            "url": "https://github.com/symfony/Filesystem.git",
-            "reference": "98e831eac836a0a5911626ce82684155f21d0e4d"
-        },
-        "dist": {
-            "type": "zip",
-            "url": "https://api.github.com/repos/symfony/Filesystem/zipball/98e831eac836a0a5911626ce82684155f21d0e4d",
-            "reference": "98e831eac836a0a5911626ce82684155f21d0e4d",
-            "shasum": ""
-        },
-        "require": {
-            "php": ">=5.3.3"
-        },
-        "time": "2014-04-16 10:36:21",
-        "type": "library",
-        "extra": {
-            "branch-alias": {
-                "dev-master": "2.5-dev"
-            }
-        },
-        "installation-source": "dist",
-        "autoload": {
-            "psr-0": {
-                "Symfony\\Component\\Filesystem\\": ""
-            }
-        },
-        "notification-url": "https://packagist.org/downloads/",
-        "license": [
-            "MIT"
-        ],
-        "authors": [
-            {
-                "name": "Fabien Potencier",
-                "email": "fabien@symfony.com",
-                "homepage": "http://fabien.potencier.org",
-                "role": "Lead Developer"
-            },
-            {
-                "name": "Symfony Community",
-                "homepage": "http://symfony.com/contributors"
-            }
-        ],
-        "description": "Symfony Filesystem Component",
-        "homepage": "http://symfony.com"
     },
     {
         "name": "monolog/monolog",
@@ -504,25 +382,74 @@
         ]
     },
     {
-        "name": "symfony/process",
-        "version": "v2.5.0",
-        "version_normalized": "2.5.0.0",
-        "target-dir": "Symfony/Component/Process",
+        "name": "symfony/filesystem",
+        "version": "v2.5.3",
+        "version_normalized": "2.5.3.0",
+        "target-dir": "Symfony/Component/Filesystem",
         "source": {
             "type": "git",
-            "url": "https://github.com/symfony/Process.git",
-            "reference": "5d7d78e23894544740219e006320678cfa4cd45b"
+            "url": "https://github.com/symfony/Filesystem.git",
+            "reference": "c1309b0ee195ad264a4314435bdaecdfacb8ae9c"
         },
         "dist": {
             "type": "zip",
-            "url": "https://api.github.com/repos/symfony/Process/zipball/5d7d78e23894544740219e006320678cfa4cd45b",
-            "reference": "5d7d78e23894544740219e006320678cfa4cd45b",
+            "url": "https://api.github.com/repos/symfony/Filesystem/zipball/c1309b0ee195ad264a4314435bdaecdfacb8ae9c",
+            "reference": "c1309b0ee195ad264a4314435bdaecdfacb8ae9c",
             "shasum": ""
         },
         "require": {
             "php": ">=5.3.3"
         },
-        "time": "2014-05-23 09:02:52",
+        "time": "2014-07-09 09:05:48",
+        "type": "library",
+        "extra": {
+            "branch-alias": {
+                "dev-master": "2.5-dev"
+            }
+        },
+        "installation-source": "dist",
+        "autoload": {
+            "psr-0": {
+                "Symfony\\Component\\Filesystem\\": ""
+            }
+        },
+        "notification-url": "https://packagist.org/downloads/",
+        "license": [
+            "MIT"
+        ],
+        "authors": [
+            {
+                "name": "Symfony Community",
+                "homepage": "http://symfony.com/contributors"
+            },
+            {
+                "name": "Fabien Potencier",
+                "email": "fabien@symfony.com"
+            }
+        ],
+        "description": "Symfony Filesystem Component",
+        "homepage": "http://symfony.com"
+    },
+    {
+        "name": "symfony/process",
+        "version": "v2.5.3",
+        "version_normalized": "2.5.3.0",
+        "target-dir": "Symfony/Component/Process",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/symfony/Process.git",
+            "reference": "e0997d2a9a1a763484b34b989900b61322a9b056"
+        },
+        "dist": {
+            "type": "zip",
+            "url": "https://api.github.com/repos/symfony/Process/zipball/e0997d2a9a1a763484b34b989900b61322a9b056",
+            "reference": "e0997d2a9a1a763484b34b989900b61322a9b056",
+            "shasum": ""
+        },
+        "require": {
+            "php": ">=5.3.3"
+        },
+        "time": "2014-08-05 09:00:40",
         "type": "library",
         "extra": {
             "branch-alias": {
@@ -541,17 +468,86 @@
         ],
         "authors": [
             {
-                "name": "Fabien Potencier",
-                "email": "fabien@symfony.com",
-                "homepage": "http://fabien.potencier.org",
-                "role": "Lead Developer"
-            },
-            {
                 "name": "Symfony Community",
                 "homepage": "http://symfony.com/contributors"
+            },
+            {
+                "name": "Fabien Potencier",
+                "email": "fabien@symfony.com"
             }
         ],
         "description": "Symfony Process Component",
         "homepage": "http://symfony.com"
+    },
+    {
+        "name": "php-ffmpeg/php-ffmpeg",
+        "version": "0.5.0",
+        "version_normalized": "0.5.0.0",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/PHP-FFMpeg/PHP-FFMpeg.git",
+            "reference": "3a0c6a1e1e1fe1d367ed0efbc6d249009c4105db"
+        },
+        "dist": {
+            "type": "zip",
+            "url": "https://api.github.com/repos/PHP-FFMpeg/PHP-FFMpeg/zipball/3a0c6a1e1e1fe1d367ed0efbc6d249009c4105db",
+            "reference": "3a0c6a1e1e1fe1d367ed0efbc6d249009c4105db",
+            "shasum": ""
+        },
+        "require": {
+            "alchemy/binary-driver": "~1.5",
+            "doctrine/cache": "~1.0",
+            "evenement/evenement": "~1.0",
+            "neutron/temporary-filesystem": "~2.1, >=2.1.1",
+            "php": ">=5.3.3"
+        },
+        "require-dev": {
+            "phpunit/phpunit": "~3.7",
+            "sami/sami": "~1.0",
+            "silex/silex": "~1.0"
+        },
+        "suggest": {
+            "php-ffmpeg/extras": "A compilation of common audio & video drivers for PHP-FFMpeg"
+        },
+        "time": "2014-08-12 19:05:45",
+        "type": "library",
+        "extra": {
+            "branch-alias": {
+                "dev-master": "0.5-dev"
+            }
+        },
+        "installation-source": "dist",
+        "autoload": {
+            "psr-0": {
+                "FFMpeg": "src"
+            }
+        },
+        "notification-url": "https://packagist.org/downloads/",
+        "license": [
+            "MIT"
+        ],
+        "authors": [
+            {
+                "name": "Romain Neutron",
+                "email": "imprec@gmail.com",
+                "homepage": "http://www.lickmychip.com/"
+            },
+            {
+                "name": "Phraseanet Team",
+                "email": "info@alchemy.fr",
+                "homepage": "http://www.phraseanet.com/"
+            }
+        ],
+        "description": "FFMpeg PHP, an Object Oriented library to communicate with AVconv / ffmpeg",
+        "keywords": [
+            "audio",
+            "audio processing",
+            "avconv",
+            "avprobe",
+            "ffmpeg",
+            "ffprobe",
+            "video",
+            "video processing"
+        ]
     }
 ]

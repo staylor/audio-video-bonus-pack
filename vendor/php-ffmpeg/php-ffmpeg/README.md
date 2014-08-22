@@ -1,6 +1,6 @@
 #PHP FFmpeg
 
-[![Build Status](https://secure.travis-ci.org/alchemy-fr/PHP-FFmpeg.png?branch=master)](http://travis-ci.org/alchemy-fr/PHP-FFmpeg)
+[![Build Status](https://secure.travis-ci.org/PHP-FFMpeg/PHP-FFMpeg.png?branch=master)](http://travis-ci.org/PHP-FFMpeg/PHP-FFMpeg)
 
 [![SensioLabsInsight](https://insight.sensiolabs.com/projects/607f3111-e2d7-44e8-8bcc-54dd64521983/big.png)](https://insight.sensiolabs.com/projects/607f3111-e2d7-44e8-8bcc-54dd64521983)
 
@@ -31,7 +31,7 @@ The recommended way to install PHP-FFMpeg is through [Composer](https://getcompo
 ```json
 {
     "require": {
-        "php-ffmpeg/php-ffmpeg": "~0.4"
+        "php-ffmpeg/php-ffmpeg": "~0.5"
     }
 }
 ```
@@ -122,6 +122,7 @@ $format->on('progress', function ($video, $format, $percentage) {
 
 $format
     -> setKiloBitrate(1000)
+    -> setAudioChannels(2)
     -> setAudioKiloBitrate(256);
 
 $video->save($format, 'video.avi');
@@ -246,6 +247,7 @@ $format->on('progress', function ($$audio, $format, $percentage) {
 });
 
 $format
+    -> setAudioChannels(2)
     -> setAudioKiloBitrate(256);
 
 $audio->save($format, 'track.flac');
@@ -364,7 +366,14 @@ $ffprobe
     ->streams('/path/to/video/mp4') // extracts streams informations
     ->videos()                      // filters video streams
     ->first()                       // returns the first video stream
-    ->get('duration');              // returns the duration property
+    ->get('codec_name');            // returns the codec_name property
+```
+
+```php
+$ffprobe = FFMpeg\FFProbe::create();
+$ffprobe
+    ->format('/path/to/video/mp4') // extracts file informations
+    ->get('duration');             // returns the duration property
 ```
 
 ##Using with Silex Microframework
