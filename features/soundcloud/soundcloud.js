@@ -266,8 +266,8 @@
 			} ).done( _.bind( this.renderResponse, this ) );
 		},
 
-		renderResponse: function( html ) {
-			this.$( '.soundcloud-wrapper' ).html( html );
+		renderResponse: function( data ) {
+			this.$( '.soundcloud-wrapper' ).html( data.body );
 			this.$( '.sc-add-to-library' ).removeClass( 'hidden' );
 			this.spinner.hide();
 		}
